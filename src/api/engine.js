@@ -1,95 +1,57 @@
-// API layer between the React app and the DK Sites engine (the Node pipeline).
-// Each function is stubbed with realistic mock data so the app runs standalone.
-// To go live, replace each body with a fetch to the engine's HTTP API and set
-// VITE_ENGINE_URL. Shapes mirror what the engine already produces.
+// API layer between the React app and the DK Sites engine HTTP API (src/api/server.js).
+// Set VITE_ENGINE_URL to the deployed API origin (e.g. https://api.dksites.com).
+// If it's unset, the app falls back to MOCK data so it still runs standalone for demos.
 
-const API = import.meta.env.VITE_ENGINE_URL || ''; // e.g. https://engine.dksites.com
+const API = import.meta.env.VITE_ENGINE_URL || '';
+const MOCK = !API;
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 
-// Step 3a: resolve a business from public data (Google Places in the engine).
+async function post(path, body) {
+  const r = await fetch(`${API}${path}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+  if (!r.ok) throw new Error((await r.json().catch(() => ({}))).error || `HTTP ${r.status}`);
+  return r.json();
+}
+async function get(path) {
+  const r = await fetch(`${API}${path}`);
+  if (!r.ok) throw new Error((await r.json().catch(() => ({}))).error || `HTTP ${r.status}`);
+  return r.json();
+}
+
 export async function lookupBusiness(name, city) {
-  // TODO: return fetch(`${API}/lookup?name=${...}&city=${...}`).then(r=>r.json())
-  await wait(900);
-  return {
-    placeId: 'mock',
-    name: name || "Riley's Hot Dog & Burger Gourmet",
-    address: '61 Glen St, New Britain, CT 06051',
-    rating: 4.7,
-    userRatingCount: 931,
-    photo: 'https://picsum.photos/seed/riley/400/300',
-  };
+  if (MOCK) { await wait(900); return { name: name || "Riley's Hot Dog & Burger Gourmet", address: '61 Glen St, New Britain, CT', rating: 4.7, userRatingCount: 931, photo: 'https://picsum.photos/seed/riley/400/300' }; }
+  return post('/api/lookup', { name, city });
 }
 
-// Step 4: run the generation pipeline -> a deployed preview.
-export async function generateSite(input) {
-  // TODO: POST `${API}/generate` with the confirmed business / description.
-  await wait(1500);
-  return {
-    previewId: 'mock-preview-id',
-    slug: 'rileys',
-    previewUrl: 'https://rileys.dksites.com/',
-    decisions: {
-      palette: { dominant: '#C8111F', accent: '#F2C832' },
-      typography: { display: 'Lilita One', body: 'Nunito' },
-      signature: 'Mustard-squiggle dividers',
-    },
-  };
+// Generation is async: kick off a job, then poll until done. onStage fires per poll so the
+// Generating screen can show live progress.
+export async function generateSite(input, onStage) {
+  if (MOCK) { await wait(1500); return { previewId: 'mock', slug: 'rileys', previewUrl: 'https://rileys.dksites.com/', decisions: {} }; }
+  const { jobId } = await post('/api/generate', input);
+  for (;;) {
+    await wait(2500);
+    const s = await get(`/api/status/${jobId}`);
+    if (onStage && s.stage) onStage(s.stage, s.progress);
+    if (s.status === 'done') return s.result;
+    if (s.status === 'error') throw new Error(s.error || 'generation failed');
+  }
 }
 
-// Step 5: editor options (Zones A + B) from the engine's buildEditOptions.
-export async function getEditOptions() {
-  await wait(400);
-  return {
-    palette: {
-      current: { dominant: '#C8111F', accent: '#F2C832' },
-      alternates: [
-        { label: 'Classic Diner', dominant: '#B5121B', accent: '#F4C542' },
-        { label: 'Charcoal & Gold', dominant: '#1A1A1A', accent: '#E8C17A' },
-      ],
-    },
-    fonts: {
-      current: { display: 'Lilita One', body: 'Nunito' },
-      alternates: [
-        { label: 'Bold Slab', display: 'Alfa Slab One', body: 'Inter' },
-        { label: 'Retro', display: 'Bungee', body: 'DM Sans' },
-      ],
-    },
-    suggestedPrompts: [
-      { type: 'menu_upload', label: 'Upload your menu (PDF/photo) to replace placeholders' },
-      { type: 'confirm', label: 'Are you family-owned? Confirm and I’ll add it.' },
-      { type: 'feature', label: 'Add an online ordering button' },
-    ],
-  };
+export async function getEditOptions(previewId) {
+  if (MOCK) { await wait(400); return { palette: { current: { dominant: '#C8111F', accent: '#F2C832' }, alternates: [{ label: 'Charcoal & Gold', dominant: '#1A1A1A', accent: '#E8C17A' }] }, fonts: { current: { display: 'Lilita One', body: 'Nunito' }, alternates: [{ label: 'Bold Slab', display: 'Alfa Slab One', body: 'Inter' }] }, suggestedPrompts: [{ type: 'menu_upload', label: 'Upload your menu (PDF/photo)' }, { type: 'feature', label: 'Add an online ordering button' }] }; }
+  return get(`/api/edit-options/${previewId}`);
 }
 
-// Step 5 (Zone C / structured picks): apply an edit and regenerate in place.
 export async function applyEdit(previewId, change) {
-  await wait(1200);
-  return { ok: true, version: 2 };
+  if (MOCK) { await wait(1200); return { version: 2 }; }
+  return post('/api/apply-edit', { previewId, instruction: change.prompt || change.instruction || JSON.stringify(change) });
 }
 
-// Step 7: domain availability + verified quote (the engine's --check).
 export async function checkDomain(domain) {
-  // TODO: GET `${API}/check?domain=${domain}`
-  await wait(700);
-  const taken = domain.includes('taken');
-  const isAi = domain.endsWith('.ai');
-  const domainCost = isAi ? 89.98 : 13.98;
-  const years = isAi ? 2 : 1;
-  const hosting = 99, fee = +(0.3 * (domainCost + hosting)).toFixed(2);
-  return {
-    domain, available: !taken, years,
-    lineItems: [
-      { label: `Domain (${years} yr)`, amount: domainCost },
-      { label: 'Hosting, SSL & email (1 yr)', amount: hosting },
-      { label: 'DK Sites service fee (30%)', amount: fee },
-    ],
-    total: +(domainCost + hosting + fee).toFixed(2),
-  };
+  if (MOCK) { await wait(700); const ai = domain.endsWith('.ai'); const dc = ai ? 89.98 : 13.98; const y = ai ? 2 : 1; const fee = +(0.3 * (dc + 99)).toFixed(2); return { domain, available: !domain.includes('taken'), years: y, lineItems: [{ label: `Domain (${y} yr)`, amount: dc }, { label: 'Hosting, SSL & email (1 yr)', amount: 99 }, { label: 'DK Sites service fee (30%)', amount: fee }], total: +(dc + 99 + fee).toFixed(2) }; }
+  return get(`/api/check?domain=${encodeURIComponent(domain)}`);
 }
 
-// Step 9: create a Stripe Checkout session (engine's createCheckout).
 export async function createCheckout(payload) {
-  await wait(600);
-  return { url: 'https://checkout.stripe.com/c/pay/mock_session' };
+  if (MOCK) { await wait(600); return { url: 'https://checkout.stripe.com/c/pay/mock' }; }
+  return post('/api/checkout', payload);
 }
