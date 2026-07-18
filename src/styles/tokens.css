@@ -55,7 +55,7 @@ label{display:block;font-size:.82rem;color:var(--text-dim);margin:0 0 6px}
 .zone h3{font-family:var(--display);font-size:.8rem;letter-spacing:.12em;text-transform:uppercase;color:var(--golden-brown);margin:0 0 10px}
 .swatch{width:32px;height:32px;border-radius:8px;border:2px solid transparent;cursor:pointer;display:inline-block}
 .swatch--on{border-color:var(--liquid-gold-bright)}
-.chip{background:var(--mid-charcoal);border:1px solid var(--line);border-radius:20px;padding:8px 14px;cursor:pointer;font-size:.85rem}
+.chip{background:var(--mid-charcoal);border:1px solid var(--line);border-radius:20px;padding:8px 14px;cursor:pointer;font-size:.85rem;color:var(--off-white);text-decoration:none;display:inline-block}
 .chip:hover{border-color:var(--golden-brown)}
 .price-bar{position:sticky;bottom:0;background:var(--mid-charcoal);border-top:1px solid var(--line);padding:14px 20px;display:flex;justify-content:space-between;align-items:center;border-radius:0 0 var(--radius) var(--radius)}
 [contenteditable="true"]{outline:2px dashed #9A7232;outline-offset:3px;border-radius:3px}

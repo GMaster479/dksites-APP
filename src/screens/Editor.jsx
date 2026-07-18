@@ -15,28 +15,44 @@ export default function Editor({ go, project }) {
   const [contentMode, setContentMode] = useState(false);
   const [prompt, setPrompt] = useState('');
 
-  useEffect(() => { getEditOptions().then(setOpts); }, []);
+  useEffect(() => { getEditOptions(project.previewId).then(setOpts); }, []);
+  const [frameKey, setFrameKey] = useState(0); // bump to reload the iframe after edits
 
   async function edit(change) {
     setBusy(true);
-    await applyEdit(project.previewId, change);
+    await applyEdit(project.previewId, { ...change, slug: project.slug });
     setBusy(false);
+    setFrameKey((k) => k + 1); // redeployed — refresh the live preview
   }
 
   return (
     <div className="container">
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14, flexWrap: 'wrap', gap: 8 }}>
         <h2>Your site — make it yours</h2>
-        <label style={{ display: 'flex', gap: 8, alignItems: 'center', margin: 0, cursor: 'pointer' }}>
-          <input type="checkbox" checked={contentMode} onChange={(e) => setContentMode(e.target.checked)} />
-          Edit text &amp; images
-        </label>
+        <div style={{ display: 'flex', gap: 14, alignItems: 'center' }}>
+          {project.previewUrl && (
+            <a className="chip" href={project.previewUrl} target="_blank" rel="noreferrer">Open live preview ↗</a>
+          )}
+          <label style={{ display: 'flex', gap: 8, alignItems: 'center', margin: 0, cursor: 'pointer' }}>
+            <input type="checkbox" checked={contentMode} onChange={(e) => setContentMode(e.target.checked)} />
+            Edit text &amp; images
+          </label>
+        </div>
       </div>
 
       <div className="editor">
-        {/* LEFT: preview. Stand-in DOM demonstrates in-place editing; prod uses an iframe. */}
+        {/* LEFT: the real generated site, live from <slug>.dksites.com. Mock only if no URL. */}
         <div className="preview-frame">
-          <MockSite editable={contentMode} />
+          {project.previewUrl ? (
+            <iframe
+              key={frameKey}
+              src={project.previewUrl}
+              title="Your generated site"
+              style={{ width: '100%', height: '100%', minHeight: 560, border: 0, display: 'block' }}
+            />
+          ) : (
+            <MockSite editable={contentMode} />
+          )}
         </div>
 
         {/* RIGHT: the three control zones */}

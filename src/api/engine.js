@@ -43,7 +43,7 @@ export async function getEditOptions(previewId) {
 
 export async function applyEdit(previewId, change) {
   if (MOCK) { await wait(1200); return { version: 2 }; }
-  return post('/api/apply-edit', { previewId, instruction: change.prompt || change.instruction || JSON.stringify(change) });
+  return post('/api/apply-edit', { previewId, slug: change.slug || null, instruction: change.prompt || change.instruction || JSON.stringify(change) });
 }
 
 export async function checkDomain(domain) {
