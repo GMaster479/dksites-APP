@@ -11,18 +11,46 @@ import Checkout from './screens/Checkout.jsx';
 import Launching from './screens/Launching.jsx';
 import Dashboard from './screens/Dashboard.jsx';
 
-// Single source of truth for the wizard. `project` carries everything gathered along
-// the way; `go` advances the step. Anonymous until the account step before checkout.
+// Wizard state persists to localStorage so a reload (or bouncing out to the live preview
+// on mobile, which evicts the tab) restores the person right where they were instead of
+// resetting to the landing page. 'generating' is never restored directly — a reload
+// mid-generation would poll a dead job — so it falls forward to the editor if a preview
+// already exists, otherwise back to landing.
+const STORAGE_KEY = 'dksites-project-v1';
+
+function loadSaved() {
+  try { return JSON.parse(localStorage.getItem(STORAGE_KEY)) || null; } catch { return null; }
+}
+function safeStep(saved) {
+  if (!saved?.step) return 'landing';
+  if (saved.step === 'generating' || saved.step === 'launching') {
+    return saved.project?.previewUrl ? 'editor' : 'landing';
+  }
+  return saved.step;
+}
+
 export default function App() {
-  const [step, setStep] = useState('landing');
-  const [project, setProject] = useState({});
+  const saved = loadSaved();
+  const [step, setStep] = useState(safeStep(saved));
+  const [project, setProject] = useState(saved?.project || {});
+
   const go = (next, patch = {}) => {
-    if (patch) setProject((p) => ({ ...p, ...patch }));
+    setProject((p) => {
+      const np = { ...p, ...patch };
+      try { localStorage.setItem(STORAGE_KEY, JSON.stringify({ step: next, project: np })); } catch {}
+      return np;
+    });
     setStep(next);
   };
 
+  const startFresh = () => {
+    try { localStorage.removeItem(STORAGE_KEY); } catch {}
+    setProject({});
+    setStep('landing');
+  };
+
   const screens = {
-    landing: <Landing go={go} />,
+    landing: <Landing go={go} project={project} startFresh={startFresh} />,
     exists: <ExistsQuestion go={go} />,
     confirm: <ConfirmBusiness go={go} project={project} />,
     describe: <DescribeBusiness go={go} />,
