@@ -106,6 +106,9 @@ export default function Editor({ go, project }) {
     try {
       await applyEdit(project.previewId, { instruction, slug: project.slug, logoFile, menuFile, photoFiles });
       save([]);
+      // Re-read the options: the build now HAS the logo/menu/photos, so the server stops
+      // reporting them as missing and those asks retire themselves.
+      try { setOpts(await getEditOptions(project.previewId)); } catch {}
       setFrameKey((k) => k + 1); // redeployed — reload the live preview
     } catch (e) {
       alert(`Couldn't apply changes: ${e.message}`);
@@ -138,7 +141,18 @@ export default function Editor({ go, project }) {
     ...(project.suggestedAsks || []),
     ...(opts?.suggestedPrompts || []).map((p) => p.label),
   ];
-  const asks = [...new Set(rawAsks)].filter((a) => a && !dismissed.includes(a));
+  // An ask is retired when the owner has already provided that thing — the server's
+  // `provided` flags are the truth, not the asks captured back at generation time.
+  const provided = opts?.provided || {};
+  const satisfied = (ask) => {
+    const spec = askKindFor(ask);
+    if (!spec) return false;
+    if (spec.kind === 'logo') return !!provided.logo;
+    if (spec.kind === 'menu') return !!provided.menu;
+    if (spec.kind === 'photo') return (provided.uploadedPhotos || 0) > 0;
+    return false;
+  };
+  const asks = [...new Set(rawAsks)].filter((a) => a && !dismissed.includes(a) && !satisfied(a));
 
   return (
     <div className="container">
