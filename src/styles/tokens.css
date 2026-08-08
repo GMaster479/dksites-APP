@@ -61,3 +61,15 @@ label{display:block;font-size:.82rem;color:var(--text-dim);margin:0 0 6px}
 [contenteditable="true"]{outline:2px dashed #9A7232;outline-offset:3px;border-radius:3px}
 .editable-img{position:relative;cursor:pointer}
 .editable-img:hover::after{content:'Replace';position:absolute;inset:0;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.55);color:#fff;font-size:.8rem;font-family:var(--body)}
+
+/* Owner asks — the most prominent thing on the editor screen. */
+.asks{background:linear-gradient(180deg,rgba(232,193,122,.10),rgba(232,193,122,.03));border:1px solid rgba(232,193,122,.38);border-radius:var(--radius);padding:18px 20px;margin-bottom:20px}
+.asks__grid{display:grid;gap:12px;grid-template-columns:1fr}
+@media(min-width:760px){.asks__grid{grid-template-columns:repeat(auto-fit,minmax(280px,1fr))}}
+.ask{position:relative;background:var(--card-bg);border:1px solid var(--line);border-radius:10px;padding:14px 34px 14px 14px;display:flex;flex-direction:column;gap:10px}
+.ask__text{margin:0;font-size:.95rem;color:var(--off-white)}
+.ask__btn{align-self:flex-start;padding:10px 18px;font-size:.9rem;cursor:pointer}
+.ask__done{color:var(--liquid-gold-bright);font-size:.9rem;font-weight:600}
+.ask__x{position:absolute;top:8px;right:10px;background:none;border:none;color:var(--text-dim);font-size:1.2rem;line-height:1;cursor:pointer;padding:2px 4px}
+.ask__x:hover{color:var(--off-white)}
+.ask__err{color:#e0a1a1;font-size:.85rem;margin:10px 0 0}

@@ -43,7 +43,28 @@ export async function getEditOptions(previewId) {
 
 export async function applyEdit(previewId, change) {
   if (MOCK) { await wait(1200); return { version: 2 }; }
-  return post('/api/apply-edit', { previewId, slug: change.slug || null, instruction: change.prompt || change.instruction || JSON.stringify(change) });
+  return post('/api/apply-edit', {
+    previewId,
+    slug: change.slug || null,
+    instruction: change.prompt || change.instruction || null,
+    logoFile: change.logoFile || null,
+    menuFile: change.menuFile || null,
+    photoFiles: change.photoFiles || [],
+  });
+}
+
+// Upload a logo / menu / photo into the preview. Base64 JSON so there's no multipart
+// dependency on the server. Returns { kind, assetPath, path } — that record gets staged
+// and is handed to applyEdit when the person applies their changes.
+export async function uploadFile(previewId, kind, file) {
+  if (MOCK) { await wait(800); return { kind, assetPath: `images/mock-${kind}.png`, path: '/mock' }; }
+  const dataBase64 = await new Promise((resolve, reject) => {
+    const r = new FileReader();
+    r.onload = () => resolve(String(r.result).split(',')[1]);
+    r.onerror = () => reject(new Error('Could not read that file.'));
+    r.readAsDataURL(file);
+  });
+  return post('/api/upload', { previewId, kind, mimeType: file.type, dataBase64 });
 }
 
 export async function checkDomain(domain) {
