@@ -248,6 +248,24 @@ export default function Editor({ go, project }) {
 
   return (
     <div className="container">
+      {/* The mental model, stated plainly. People arrive expecting drag-and-drop; this is
+          the opposite — the site is already built, and changes are described, batched, and
+          rebuilt. Saying so up front prevents the "why isn't anything happening" moment. */}
+      <section className="howto">
+        <div className="howto__step">
+          <span className="howto__n howto__n--done">✓</span>
+          <div><strong>Your site is built.</strong> <span className="muted">Generated from your business — it's live at the link below right now.</span></div>
+        </div>
+        <div className="howto__step">
+          <span className="howto__n">2</span>
+          <div><strong>Tell me what to change.</strong> <span className="muted">Pick colors or type, click any image to swap it, or just describe it in your own words. Stack up as many changes as you want — they collect in the list at the bottom.</span></div>
+        </div>
+        <div className="howto__step">
+          <span className="howto__n">3</span>
+          <div><strong>Hit Apply changes and I rebuild the whole site.</strong> <span className="muted">This isn't a drag-and-drop editor — nothing changes as you click. I take everything at once and build it properly, which takes a couple of minutes.</span></div>
+        </div>
+      </section>
+
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14, flexWrap: 'wrap', gap: 8 }}>
         <h2>Your site — make it yours</h2>
         <label style={{ display: 'flex', gap: 8, alignItems: 'center', margin: 0, cursor: 'pointer' }}>
@@ -482,7 +500,9 @@ export default function Editor({ go, project }) {
 
       <div className="price-bar" style={{ marginTop: 18, borderRadius: 'var(--radius)', gap: 12, flexWrap: 'wrap' }}>
         <span className="muted">
-          {pending.length ? `${pending.length} change${pending.length > 1 ? 's' : ''} ready to apply` : 'Preview is free — edit as much as you like.'}
+          {pending.length
+            ? `${pending.length} change${pending.length > 1 ? 's' : ''} staged — nothing is live until you apply`
+            : 'Nothing staged yet. Stack up changes, then rebuild in one go.'}
         </span>
         <div className="row" style={{ justifyContent: 'flex-end', margin: 0 }}>
           <Button variant="ghost" disabled={!pending.length} onClick={applyAll}>Apply changes</Button>

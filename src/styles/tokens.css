@@ -92,3 +92,10 @@ label{display:block;font-size:.82rem;color:var(--text-dim);margin:0 0 6px}
 /* Replace-image dialog */
 .swap{position:fixed;inset:0;background:rgba(0,0,0,.6);display:flex;align-items:center;justify-content:center;padding:20px;z-index:50}
 .swap__card{position:relative;background:var(--card-bg);border:1px solid rgba(232,193,122,.4);border-radius:var(--radius);padding:20px;width:min(440px,100%)}
+
+/* "How this works" — the drag-and-drop expectation reset, top of the editor */
+.howto{display:grid;gap:10px;background:var(--mid-charcoal);border:1px solid var(--line);border-left:3px solid var(--golden-brown);border-radius:var(--radius);padding:16px 18px;margin-bottom:18px}
+@media(min-width:900px){.howto{grid-template-columns:repeat(3,1fr);gap:18px}}
+.howto__step{display:flex;gap:10px;align-items:flex-start;font-size:.92rem;line-height:1.5}
+.howto__n{flex:0 0 22px;height:22px;border-radius:50%;background:var(--card-bg);border:1px solid var(--line);color:var(--liquid-gold-bright);font-family:var(--display);font-size:.72rem;display:flex;align-items:center;justify-content:center;margin-top:2px}
+.howto__n--done{background:var(--golden-brown);color:#1c1606;border-color:var(--golden-brown)}

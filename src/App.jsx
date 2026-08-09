@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Logo, Progress } from './components/Bits.jsx';
 import Landing from './screens/Landing.jsx';
 import ExistsQuestion from './screens/ExistsQuestion.jsx';
@@ -21,12 +21,33 @@ const STORAGE_KEY = 'dksites-project-v1';
 function loadSaved() {
   try { return JSON.parse(localStorage.getItem(STORAGE_KEY)) || null; } catch { return null; }
 }
+// Which steps are reachable given what the project actually holds. Guards Forward and any
+// stale history entry from dropping someone into a screen with nothing behind it.
+function canEnter(step, project = {}) {
+  switch (step) {
+    case 'landing':
+    case 'exists':
+    case 'confirm':
+    case 'describe':
+      return true;
+    case 'editor':
+    case 'domain':
+      return !!project.previewUrl;
+    case 'checkout':
+      return !!project.previewUrl && !!project.domain;
+    case 'dashboard':
+      return !!project.domain;
+    default:
+      return false;
+  }
+}
+
 function safeStep(saved) {
   if (!saved?.step) return 'landing';
   if (saved.step === 'generating' || saved.step === 'launching') {
     return saved.project?.previewUrl ? 'editor' : 'landing';
   }
-  return saved.step;
+  return canEnter(saved.step, saved.project || {}) ? saved.step : 'landing';
 }
 
 export default function App() {
@@ -34,18 +55,38 @@ export default function App() {
   const [step, setStep] = useState(safeStep(saved));
   const [project, setProject] = useState(saved?.project || {});
 
-  // Browser Back/Forward move between wizard steps. Each step pushes a history entry and
-  // popstate walks it, so the phone's back gesture does the obvious thing instead of
-  // dumping the person out of the app.
+  // Refs so the popstate handler always sees CURRENT state — it's registered once, and a
+  // stale closure was how Forward could land you somewhere that no longer exists.
+  const projectRef = useRef(project);
+  const stepRef = useRef(step);
+  useEffect(() => { projectRef.current = project; }, [project]);
+  useEffect(() => { stepRef.current = step; }, [step]);
+
+  // Browser Back/Forward walk the wizard, but a step is only entered if the data it needs
+  // actually exists. Hitting Forward after starting over shouldn't teleport you into an
+  // editor for a build that's gone — it should simply do nothing.
   useEffect(() => {
-    if (!window.history.state?.dksitesStep) {
-      window.history.replaceState({ dksitesStep: step }, '');
-    }
+    // Re-anchor history to whatever we restored on load, so Back/Forward and a plain
+    // refresh agree with each other instead of fighting.
+    window.history.replaceState({ dksitesStep: stepRef.current }, '');
+
     const onPop = (e) => {
-      const s = e.state?.dksitesStep;
-      if (!s) return;
-      setStep(s === 'generating' || s === 'launching' ? 'editor' : s);
+      const p = projectRef.current || {};
+      const raw = e.state?.dksitesStep;
+      if (!raw) return;
+      // generating/launching are transient — never restore into a dead poll.
+      const target = raw === 'generating' || raw === 'launching'
+        ? (p.previewUrl ? 'editor' : 'landing')
+        : raw;
+
+      if (!canEnter(target, p)) {
+        // Stay put and re-anchor, so the history entry isn't left pointing at a dead step.
+        window.history.pushState({ dksitesStep: stepRef.current }, '');
+        return;
+      }
+      setStep(target);
     };
+
     window.addEventListener('popstate', onPop);
     return () => window.removeEventListener('popstate', onPop);
   }, []);
