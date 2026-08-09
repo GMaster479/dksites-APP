@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Logo, Progress } from './components/Bits.jsx';
 import Landing from './screens/Landing.jsx';
 import ExistsQuestion from './screens/ExistsQuestion.jsx';
@@ -34,6 +34,22 @@ export default function App() {
   const [step, setStep] = useState(safeStep(saved));
   const [project, setProject] = useState(saved?.project || {});
 
+  // Browser Back/Forward move between wizard steps. Each step pushes a history entry and
+  // popstate walks it, so the phone's back gesture does the obvious thing instead of
+  // dumping the person out of the app.
+  useEffect(() => {
+    if (!window.history.state?.dksitesStep) {
+      window.history.replaceState({ dksitesStep: step }, '');
+    }
+    const onPop = (e) => {
+      const s = e.state?.dksitesStep;
+      if (!s) return;
+      setStep(s === 'generating' || s === 'launching' ? 'editor' : s);
+    };
+    window.addEventListener('popstate', onPop);
+    return () => window.removeEventListener('popstate', onPop);
+  }, []);
+
   const go = (next, patch = {}) => {
     setProject((p) => {
       const np = { ...p, ...patch };
@@ -41,6 +57,7 @@ export default function App() {
       return np;
     });
     setStep(next);
+    try { window.history.pushState({ dksitesStep: next }, ''); } catch {}
   };
 
   const startFresh = () => {

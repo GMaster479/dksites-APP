@@ -53,6 +53,13 @@ export async function applyEdit(previewId, change) {
   });
 }
 
+// Import an image the owner already has online. The SERVER downloads and self-hosts it —
+// we never hotlink someone else's URL, because their site changing would break ours.
+export async function importImage(previewId, url, kind = 'photo') {
+  if (MOCK) { await wait(600); return { kind, assetPath: 'images/mock-import.jpg', path: '/mock' }; }
+  return post('/api/import-image', { previewId, url, kind });
+}
+
 // Upload a logo / menu / photo into the preview. Base64 JSON so there's no multipart
 // dependency on the server. Returns { kind, assetPath, path } — that record gets staged
 // and is handed to applyEdit when the person applies their changes.
