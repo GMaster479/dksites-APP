@@ -227,10 +227,12 @@ export default function Editor({ go, project }) {
   const selPalette = stagedOf('palette')?.payload;
 
   // Asks come from triage (what the build is missing) plus the editor's own suggestions.
+  // The panel carries only the things ONLY the owner can supply: the triage asks plus any
+  // high-priority prompt. Everything else is a nice-to-have and lives in the sidebar.
   const rawAsks = [
     ...(project.suggestedAsks || []),
-    ...(opts?.suggestedPrompts || []).map((p) => p.label),
-  ];
+    ...(opts?.suggestedPrompts || []).filter((p) => p.priority === 'high').map((p) => p.label),
+  ].map((a) => String(a || '').trim()).filter((a) => a.length > 3);
   // An ask is retired when the owner has already provided that thing — the server's
   // `provided` flags are the truth, not the asks captured back at generation time.
   const provided = opts?.provided || {};
@@ -393,19 +395,32 @@ export default function Editor({ go, project }) {
                 )}
               </div>
 
-              {opts.suggestedPrompts.filter((sp) => !askKindFor(sp.label) && !dismissed.includes(sp.label)).length > 0 && (
-                <div className="zone">
-                  <h3>Suggested</h3>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                    {opts.suggestedPrompts
-                      .filter((sp) => !askKindFor(sp.label) && !dismissed.includes(sp.label))
-                      .map((sp, i) => (
+              {(() => {
+                // Low-priority extras only: no blanks, nothing already shown in the panel
+                // above, nothing dismissed, and nothing already staged.
+                const extras = (opts.suggestedPrompts || []).filter(
+                  (sp) =>
+                    sp.priority !== 'high' &&
+                    String(sp.label || '').trim().length > 3 &&
+                    !askKindFor(sp.label) &&
+                    !dismissed.includes(sp.label) &&
+                    !pending.some((p) => p.label === sp.label)
+                );
+                if (!extras.length) return null;
+                return (
+                  <div className="zone">
+                    <h3>Also worth considering</h3>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                      {extras.map((sp, i) => (
                         <button key={i} className="chip" style={{ textAlign: 'left' }}
-                          onClick={() => stage(`sugg-${i}`, sp.label, sp.prompt || sp.label)}>+ {sp.label}</button>
+                          onClick={() => stage(`sugg-${sp.label.slice(0, 24)}`, sp.label, sp.prompt || sp.label, true)}>
+                          + {sp.label}
+                        </button>
                       ))}
+                    </div>
                   </div>
-                </div>
-              )}
+                );
+              })()}
 
               <div className="zone">
                 <h3>Ask for any change</h3>
