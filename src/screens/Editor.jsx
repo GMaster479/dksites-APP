@@ -61,6 +61,8 @@ export default function Editor({ go, project }) {
   const [target, setTarget] = useState(null);   // image clicked inside the preview
   const [linkUrl, setLinkUrl] = useState('');
   const [openPicker, setOpenPicker] = useState(null);
+  const [applyStage, setApplyStage] = useState(null);
+  const [applyError, setApplyError] = useState(null);
   const frameRef = useRef(null);
 
   // Load options + restore any staged-but-unapplied changes from a previous visit.
@@ -184,7 +186,10 @@ export default function Editor({ go, project }) {
 
   async function applyAll() {
     if (!pending.length) return;
+    setApplyError(null);
     setApplying(true);
+    setApplyStage('Sending your changes…');
+
     const instruction = pending
       .filter((p) => p.instruction)
       .map((p, i) => `${i + 1}. ${p.instruction}`)
@@ -193,17 +198,25 @@ export default function Editor({ go, project }) {
     const logoFile = uploads.find((u) => u.upload.kind === 'logo')?.upload.records[0] || null;
     const menuFile = uploads.find((u) => u.upload.kind === 'menu')?.upload.records[0] || null;
     const photoFiles = uploads.filter((u) => u.upload.kind === 'photo').flatMap((u) => u.upload.records);
+    // Colour and type go as STRUCTURED picks, not just prose. That's what updates the
+    // stored decisions — otherwise the "in use" panel keeps showing the old values.
+    const setPalette = stagedOf('palette')?.payload || null;
+    const setFonts = stagedOf('fonts')?.payload || null;
+
     try {
-      await applyEdit(project.previewId, { instruction, slug: project.slug, logoFile, menuFile, photoFiles });
+      await applyEdit(
+        project.previewId,
+        { instruction, slug: project.slug, logoFile, menuFile, photoFiles, setPalette, setFonts },
+        (stage) => setApplyStage(stage)
+      );
       save([]);
-      // Re-read the options: the build now HAS the logo/menu/photos, so the server stops
-      // reporting them as missing and those asks retire themselves.
       try { setOpts(await getEditOptions(project.previewId)); } catch {}
-      setFrameKey((k) => k + 1); // redeployed — reload the live preview
+      setFrameKey((k) => k + 1);
+      setApplying(false);
     } catch (e) {
-      alert(`Couldn't apply changes: ${e.message}`);
+      setApplyError(e.message || 'Something went wrong while rebuilding.');
+      setApplying(false);
     }
-    setApplying(false);
   }
 
   // ---- Applying: show the person their own decisions while they wait ----
@@ -212,11 +225,11 @@ export default function Editor({ go, project }) {
       <div className="center container">
         <div className="spinner" />
         <h1>Applying your changes</h1>
-        <p className="sub">Rebuilding your site with everything you picked. Usually 2–4 minutes.</p>
+        <p className="sub">{applyStage || 'Rebuilding your site with everything you picked.'} Usually 2–4 minutes.</p>
         <div className="stack" style={{ textAlign: 'left' }}>
           {pending.map((p) => (
             <div key={p.id} className="card" style={{ padding: '10px 14px' }}>
-              <span style={{ color: 'var(--liquid-gold-bright)' }}>•</span> {p.label}
+              <span style={{ color: 'var(--silver)' }}>•</span> {p.label}
             </div>
           ))}
         </div>
@@ -225,6 +238,13 @@ export default function Editor({ go, project }) {
   }
 
   const selPalette = stagedOf('palette')?.payload;
+
+  // Placeholder written against THIS build by the options pass, so it never reads like a
+  // canned example from someone else's site. Rotates so it doesn't feel like one command.
+  const examples = opts?.examplePrompts?.length ? opts.examplePrompts : null;
+  const placeholderText = examples
+    ? `e.g. ${examples[Math.floor(Date.now() / 60000) % examples.length]}`
+    : 'e.g. make the hero photo bigger, and use warmer colors in the footer';
 
   // Asks come from triage (what the build is missing) plus the editor's own suggestions.
   // The panel carries only the things ONLY the owner can supply: the triage asks plus any
@@ -329,6 +349,15 @@ export default function Editor({ go, project }) {
                 </section>
               )}
 
+          {applyError && (
+            <div className="alert">
+              <strong>That didn't go through.</strong>
+              <p className="muted" style={{ margin: '4px 0 10px' }}>{applyError}</p>
+              <p className="muted" style={{ margin: '0 0 10px' }}>Your changes are still staged below — nothing was lost.</p>
+              <Button variant="ghost" onClick={applyAll}>Try again</Button>
+            </div>
+          )}
+
           <p className="muted" style={{ marginTop: 0 }}>
             Pick as much as you like — nothing rebuilds until you hit <strong>Apply changes</strong>.
           </p>
@@ -413,6 +442,15 @@ export default function Editor({ go, project }) {
                 )}
               </div>
 
+              <p className="muted" style={{ margin: '-4px 0 18px' }}>
+                None of these feel right? Describe what you want in the box below — colors,
+                a font name, a mood. Browse{' '}
+                <a href="https://fonts.google.com" target="_blank" rel="noreferrer">Google Fonts</a>{' '}
+                or grab a hex code from a{' '}
+                <a href="https://coolors.co/generate" target="_blank" rel="noreferrer">color picker</a>{' '}
+                and tell me what you found.
+              </p>
+
               {(() => {
                 // Low-priority extras only: no blanks, nothing already shown in the panel
                 // above, nothing dismissed, and nothing already staged.
@@ -442,7 +480,7 @@ export default function Editor({ go, project }) {
 
               <div className="zone">
                 <h3>Ask for any change</h3>
-                <textarea className="input" placeholder="e.g. Remove the pulsing ball at the end of the arc. Swap the mini golf card image for the outdoor course photo."
+                <textarea className="input" placeholder={placeholderText}
                   value={prompt} onChange={(e) => setPrompt(e.target.value)} />
                 <Button variant="ghost" disabled={prompt.trim().length < 4}
                   onClick={() => { stage('prompt', prompt.trim(), prompt.trim()); setPrompt(''); }}>

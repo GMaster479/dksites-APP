@@ -41,17 +41,33 @@ export async function getEditOptions(previewId) {
   return get(`/api/edit-options/${previewId}`);
 }
 
-export async function applyEdit(previewId, change) {
+// Applying is a background job now: a rebuild takes 2-4 minutes, and a single request
+// that long dies if a phone backgrounds the tab or drops signal. Same jobId + polling
+// pattern as generation. onStage fires per poll so the screen can show real progress.
+export async function applyEdit(previewId, change, onStage) {
   if (MOCK) { await wait(1200); return { version: 2 }; }
-  return post('/api/apply-edit', {
+  const body = {
     previewId,
     slug: change.slug || null,
-    instruction: change.prompt || change.instruction || null,
+    instruction: change.instruction || change.prompt || null,
     logoFile: change.logoFile || null,
     menuFile: change.menuFile || null,
     photoFiles: change.photoFiles || [],
-  });
+    setPalette: change.setPalette || null,
+    setFonts: change.setFonts || null,
+  };
+  const started = await post('/api/apply-edit', body);
+  if (!started.jobId) return started; // older server: already-finished response
+
+  for (;;) {
+    await wait(2500);
+    const st = await get(`/api/status/${started.jobId}`);
+    if (onStage && st.stage) onStage(st.stage, st.progress);
+    if (st.status === 'done') return st.result || {};
+    if (st.status === 'error') throw new Error(st.error || 'The rebuild failed.');
+  }
 }
+
 
 // Import an image the owner already has online. The SERVER downloads and self-hosts it —
 // we never hotlink someone else's URL, because their site changing would break ours.

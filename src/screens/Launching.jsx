@@ -17,7 +17,7 @@ export default function Launching({ go, project }) {
       <div className="stack" style={{ maxWidth: 380 }}>
         {STEPS.map((s, i) => (
           <div key={i} style={{ display: 'flex', gap: 10, alignItems: 'center', opacity: i < done ? 1 : 0.4 }}>
-            <span style={{ color: 'var(--liquid-gold-bright)' }}>{i < done ? '✓' : '○'}</span>{s}
+            <span style={{ color: 'var(--silver)' }}>{i < done ? '✓' : '○'}</span>{s}
           </div>
         ))}
       </div>
