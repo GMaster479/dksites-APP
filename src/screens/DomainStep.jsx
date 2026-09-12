@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Button } from '../components/Bits.jsx';
-import { checkDomain } from '../api/engine.js';
+import { checkDomain, inspectDomain, connectDomain, domainStatus } from '../api/engine.js';
 
 export default function DomainStep({ go }) {
   const [mode, setMode] = useState(null); // 'new' | 'own'
@@ -28,16 +28,7 @@ export default function DomainStep({ go }) {
   }
 
   if (mode === 'own') {
-    return (
-      <div className="center container">
-        <h1>Connect your domain</h1>
-        <p className="sub">Enter it and we’ll detect your registrar and give you exact, click-by-click steps to point it here. Your site goes live the same day — no waiting on a transfer.</p>
-        <div className="stack">
-          <input className="input" placeholder="yourbusiness.com" value={domain} onChange={(e) => setDomain(e.target.value)} />
-          <Button disabled={!domain} onClick={() => go('checkout', { domain, ownDomain: true })}>Continue</Button>
-        </div>
-      </div>
-    );
+    return <ConnectOwnDomain go={go} project={project} />;
   }
 
   return (
@@ -61,6 +52,150 @@ export default function DomainStep({ go }) {
           <Button onClick={() => go('checkout', { domain: quote.domain, quote })} style={{ marginTop: 12, width: '100%', justifyContent: 'center' }}>Continue to checkout</Button>
         </div>
       ) : <p className="muted">{quote.domain} is taken — try another.</p>)}
+    </div>
+  );
+}
+
+
+// ---- Connecting a domain the client already owns --------------------------------
+// The commercially important path: most prospects own a domain and a bad site. Three
+// stages — look it up, prepare our side, then walk them through the one setting they
+// have to change. Their old site stays up the whole time.
+function ConnectOwnDomain({ go, project }) {
+  const [domain, setDomain] = useState('');
+  const [info, setInfo] = useState(null);      // registrar lookup
+  const [conn, setConn] = useState(null);      // our side prepared + nameservers
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState(null);
+  const [status, setStatus] = useState(null);  // propagation polling
+  const [copied, setCopied] = useState(false);
+
+  async function look() {
+    setBusy(true); setErr(null);
+    try { setInfo(await inspectDomain(domain.trim())); }
+    catch (e) { setErr(e.message || 'Could not look that up.'); }
+    setBusy(false);
+  }
+
+  async function prepare() {
+    setBusy(true); setErr(null);
+    try { setConn(await connectDomain(info.domain, project.previewId, project.slug)); }
+    catch (e) { setErr(e.message || 'Could not set that up.'); }
+    setBusy(false);
+  }
+
+  async function check() {
+    setBusy(true); setErr(null);
+    try { setStatus(await domainStatus(conn.domain, conn.zoneId)); }
+    catch (e) { setErr(e.message || 'Could not check yet.'); }
+    setBusy(false);
+  }
+
+  function copyNs() {
+    try {
+      navigator.clipboard.writeText((conn.nameservers || []).join('\n'));
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {}
+  }
+
+  // Stage 3 — the walkthrough
+  if (conn) {
+    const w = conn.walkthrough || {};
+    return (
+      <div className="container" style={{ paddingTop: 24, maxWidth: 720 }}>
+        <p className="eyebrow">Step 3 of 3</p>
+        <h1>Point {conn.domain} at your new site</h1>
+        <p className="sub" style={{ maxWidth: '60ch' }}>
+          Your site is built and waiting. One setting at {w.registrar || 'your domain provider'} switches it over.
+          {' '}Your current site stays up until the change takes effect.
+        </p>
+
+        <div className="card" style={{ marginTop: 18 }}>
+          <p className="eyebrow" style={{ marginBottom: 8 }}>Enter these two nameservers</p>
+          <div className="ns">
+            {(conn.nameservers || []).map((n) => <code key={n} className="ns__item">{n}</code>)}
+          </div>
+          <div className="row" style={{ justifyContent: 'flex-start', marginTop: 10 }}>
+            <button className="chip" onClick={copyNs}>{copied ? 'Copied ✓' : 'Copy both'}</button>
+          </div>
+          {w.nameserverNote && <p className="muted" style={{ margin: '10px 0 0' }}>{w.nameserverNote}</p>}
+        </div>
+
+        <div className="card" style={{ marginTop: 14 }}>
+          <p className="eyebrow" style={{ marginBottom: 10 }}>At {w.registrar || 'your provider'}</p>
+          <ol className="steps">
+            {(w.steps || []).map((st, i) => <li key={i}>{st}</li>)}
+          </ol>
+          {w.note && <p className="muted" style={{ margin: '10px 0 0' }}>{w.note}</p>}
+        </div>
+
+        <div className="card" style={{ marginTop: 14 }}>
+          <p className="eyebrow" style={{ marginBottom: 8 }}>Done it?</p>
+          <p className="muted" style={{ margin: '0 0 10px' }}>{w.propagation}</p>
+          <div className="row" style={{ justifyContent: 'flex-start' }}>
+            <Button onClick={check} disabled={busy}>{busy ? 'Checking…' : "Check if it's live"}</Button>
+            <button className="btn btn--ghost" onClick={() => go('dashboard', { domain: conn.domain, ownDomain: true })}>
+              I'll check later
+            </button>
+          </div>
+          {status && (
+            <p className="muted" style={{ marginTop: 12 }}>
+              {status.active
+                ? `✓ ${status.domain} is connected and secured with SSL.${status.serving ? ' Your site is loading.' : ' Give it another minute to start serving.'}`
+                : `Not yet — still showing the old nameservers. This is normal; it usually takes 15 minutes to a couple of hours.`}
+            </p>
+          )}
+          {err && <p className="ask__err">{err}</p>}
+        </div>
+      </div>
+    );
+  }
+
+  // Stage 2 — we know the registrar, confirm before we touch anything
+  if (info) {
+    return (
+      <div className="center container">
+        <p className="eyebrow">Step 2 of 3</p>
+        <h1>{info.domain}</h1>
+        <p className="sub">
+          {info.registrar
+            ? `Registered with ${info.registrar}. I'll give you exact click-by-click steps for their site.`
+            : `I couldn't identify your provider, so I'll give you general steps that work almost everywhere.`}
+        </p>
+        {info.alreadyOnCloudflare && (
+          <p className="muted" style={{ maxWidth: '52ch' }}>
+            Heads up: this domain already uses Cloudflare nameservers, which needs a slightly
+            different move. Go ahead and I'll show you what to do.
+          </p>
+        )}
+        <div className="row">
+          <Button onClick={prepare} disabled={busy}>{busy ? 'Setting up…' : 'Set up my domain'}</Button>
+          <button className="btn btn--ghost" onClick={() => { setInfo(null); setErr(null); }}>Different domain</button>
+        </div>
+        <p className="muted">Nothing changes on your domain yet — this just prepares your side.</p>
+        {err && <p className="ask__err">{err}</p>}
+      </div>
+    );
+  }
+
+  // Stage 1 — which domain?
+  return (
+    <div className="center container">
+      <p className="eyebrow">Step 1 of 3</p>
+      <h1>Connect your domain</h1>
+      <p className="sub">
+        Enter the domain you already own. I'll figure out who it's registered with and give you
+        the exact steps — no transfer, no downtime.
+      </p>
+      <div className="stack">
+        <input className="input" placeholder="yourbusiness.com" value={domain}
+          onChange={(e) => setDomain(e.target.value)} />
+        <Button disabled={busy || !domain.includes('.')} onClick={look}>
+          {busy ? 'Looking it up…' : 'Continue'}
+        </Button>
+        {err && <p className="ask__err">{err}</p>}
+      </div>
     </div>
   );
 }

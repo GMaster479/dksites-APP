@@ -17,8 +17,9 @@ const dismissKey = (id) => `dksites-dismissed-${id || 'none'}`;
 const ASK_KINDS = [
   { kind: 'logo',  test: /logo/i,                 cta: 'Upload logo',   accept: 'image/*',
     done: 'Logo uploaded — palette will be rebuilt around it' },
-  { kind: 'menu',  test: /menu|tap list/i,        cta: 'Upload menu',   accept: 'image/*,application/pdf',
-    done: 'Menu uploaded — real items will replace the placeholders' },
+  { kind: 'menu',  test: /menu|tap list/i,        cta: 'Upload menu',   accept: 'image/*,application/pdf', multiple: true,
+    done: 'Menu uploaded — real items will replace the placeholders', repeatable: true,
+    more: 'Add another page' },
   { kind: 'photo', test: /photo|picture|shot|gallery|hero/i, cta: 'Add photos', accept: 'image/*', multiple: true,
     done: 'Photos uploaded' },
 ];
@@ -170,14 +171,20 @@ export default function Editor({ go, project }) {
     try {
       const recs = [];
       for (const f of files) recs.push(await uploadFile(project.previewId, spec.kind, f));
+      // Photos and MENU PAGES accumulate — a two-page menu arrives as two files, and
+      // uploading the second must not discard the first. Only the logo replaces.
+      const accumulates = spec.kind === 'photo' || spec.kind === 'menu';
       const entry = {
         id: `${spec.kind}-${Date.now()}`,
-        kind: spec.kind === 'photo' ? `photo-${Date.now()}` : spec.kind, // logos/menus replace; photos accumulate
-        label: spec.kind === 'photo' ? `${recs.length} photo${recs.length > 1 ? 's' : ''} uploaded` : spec.done,
+        kind: accumulates ? `${spec.kind}-${Date.now()}` : spec.kind,
+        label:
+          spec.kind === 'photo' ? `${recs.length} photo${recs.length > 1 ? 's' : ''} uploaded`
+          : spec.kind === 'menu' ? `Menu page${recs.length > 1 ? 's' : ''} uploaded (${recs.length})`
+          : spec.done,
         instruction: null,
         upload: { kind: spec.kind, records: recs },
       };
-      save(spec.kind === 'photo' ? [...pending, entry] : [...pending.filter((p) => p.kind !== spec.kind), entry]);
+      save(accumulates ? [...pending, entry] : [...pending.filter((p) => p.kind !== spec.kind), entry]);
     } catch (e) {
       setUploadError(e.message || 'Upload failed.');
     }
@@ -196,7 +203,8 @@ export default function Editor({ go, project }) {
       .join('\n');
     const uploads = pending.filter((p) => p.upload);
     const logoFile = uploads.find((u) => u.upload.kind === 'logo')?.upload.records[0] || null;
-    const menuFile = uploads.find((u) => u.upload.kind === 'menu')?.upload.records[0] || null;
+    const menuRecords = uploads.filter((u) => u.upload.kind === 'menu').flatMap((u) => u.upload.records);
+    const menuFile = menuRecords[0] || null;      // back-compat for a single page
     const photoFiles = uploads.filter((u) => u.upload.kind === 'photo').flatMap((u) => u.upload.records);
     // Colour and type go as STRUCTURED picks, not just prose. That's what updates the
     // stored decisions — otherwise the "in use" panel keeps showing the old values.
@@ -206,7 +214,7 @@ export default function Editor({ go, project }) {
     try {
       await applyEdit(
         project.previewId,
-        { instruction, slug: project.slug, logoFile, menuFile, photoFiles, setPalette, setFonts },
+        { instruction, slug: project.slug, logoFile, menuFile, menuFiles: menuRecords, photoFiles, setPalette, setFonts },
         (stage) => setApplyStage(stage)
       );
       save([]);
@@ -260,7 +268,7 @@ export default function Editor({ go, project }) {
     const spec = askKindFor(ask);
     if (!spec) return false;
     if (spec.kind === 'logo') return !!provided.logo;
-    if (spec.kind === 'menu') return !!provided.menu;
+    if (spec.kind === 'menu') return !!provided.menu && !pending.some((p) => p.upload?.kind === 'menu');
     if (spec.kind === 'photo') return (provided.uploadedPhotos || 0) > 0;
     return false;
   };

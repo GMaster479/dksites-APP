@@ -52,6 +52,7 @@ export async function applyEdit(previewId, change, onStage) {
     instruction: change.instruction || change.prompt || null,
     logoFile: change.logoFile || null,
     menuFile: change.menuFile || null,
+    menuFiles: change.menuFiles || [],
     photoFiles: change.photoFiles || [],
     setPalette: change.setPalette || null,
     setFonts: change.setFonts || null,
@@ -98,4 +99,34 @@ export async function checkDomain(domain) {
 export async function createCheckout(payload) {
   if (MOCK) { await wait(600); return { url: 'https://checkout.stripe.com/c/pay/mock' }; }
   return post('/api/checkout', payload);
+}
+
+// ---- Connecting a domain the client already owns --------------------------------
+// Who is it registered with, and what will they have to click? Nothing is changed here.
+export async function inspectDomain(domain) {
+  if (MOCK) {
+    await wait(700);
+    return { domain, registrar: 'GoDaddy', walkthroughKey: 'godaddy', currentNameservers: ['ns1.godaddy.com'],
+      walkthrough: { registrar: 'GoDaddy', steps: ['Sign in at godaddy.com…'], nameservers: [] } };
+  }
+  return post('/api/domain/inspect', { domain });
+}
+
+// Prepare our side (deploy, routes, zone) and get the exact nameservers they must enter.
+export async function connectDomain(domain, previewId, slug) {
+  if (MOCK) {
+    await wait(1200);
+    return { domain, zoneId: 'mock', zoneStatus: 'pending',
+      nameservers: ['grant.ns.cloudflare.com', 'peaches.ns.cloudflare.com'],
+      walkthrough: { registrar: 'GoDaddy', steps: ['Sign in at godaddy.com and open "My Products".'],
+        nameservers: ['grant.ns.cloudflare.com', 'peaches.ns.cloudflare.com'],
+        nameserverNote: 'Replace BOTH existing nameservers.', propagation: 'Usually 15 minutes to a couple of hours.' } };
+  }
+  return post('/api/domain/connect', { domain, previewId, slug });
+}
+
+// Has their nameserver change landed yet?
+export async function domainStatus(domain, zoneId) {
+  if (MOCK) { await wait(800); return { domain, zoneStatus: 'pending', active: false, serving: false, ssl: 'pending' }; }
+  return get(`/api/domain/status?domain=${encodeURIComponent(domain)}&zoneId=${encodeURIComponent(zoneId)}`);
 }
