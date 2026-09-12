@@ -79,7 +79,7 @@ function ConnectOwnDomain({ go, project }) {
 
   async function prepare() {
     setBusy(true); setErr(null);
-    try { setConn(await connectDomain(info.domain, project.previewId, project.slug)); }
+    try { setConn(await connectDomain(info?.domain || project.domain, project.previewId, project.slug)); }
     catch (e) { setErr(e.message || 'Could not set that up.'); }
     setBusy(false);
   }
@@ -152,8 +152,9 @@ function ConnectOwnDomain({ go, project }) {
     );
   }
 
-  // Stage 2 — we know the registrar, confirm before we touch anything
-  if (info) {
+  // Stage 2 — registrar known: price it, then checkout. Nothing touches their domain yet.
+  if (info && !project.paid) {
+    const q = info.quote;
     return (
       <div className="center container">
         <p className="eyebrow">Step 2 of 3</p>
@@ -163,17 +164,53 @@ function ConnectOwnDomain({ go, project }) {
             ? `Registered with ${info.registrar}. I'll give you exact click-by-click steps for their site.`
             : `I couldn't identify your provider, so I'll give you general steps that work almost everywhere.`}
         </p>
+
+        {q && (
+          <div className="card" style={{ maxWidth: 420, width: '100%', textAlign: 'left' }}>
+            {q.lineItems.map((li, i) => (
+              <div key={i} style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0' }}>
+                <span className="muted">{li.label}</span><span>${li.amount.toFixed(2)}</span>
+              </div>
+            ))}
+            <div style={{ display: 'flex', justifyContent: 'space-between', borderTop: '1px solid var(--line)', paddingTop: 8, marginTop: 8, fontWeight: 700 }}>
+              <span>Total</span><span>${q.total.toFixed(2)}</span>
+            </div>
+            <p className="muted" style={{ margin: '12px 0 0' }}>
+              No domain charge — you already own {info.domain}.{' '}
+              <strong>Keep paying your renewal at {info.registrar || 'your registrar'}.</strong>{' '}
+              We host and secure the site; the domain stays yours. If it lapses, the site goes offline.
+            </p>
+          </div>
+        )}
+
         {info.alreadyOnCloudflare && (
           <p className="muted" style={{ maxWidth: '52ch' }}>
             Heads up: this domain already uses Cloudflare nameservers, which needs a slightly
-            different move. Go ahead and I'll show you what to do.
+            different move. Continue and I'll show you what to do.
           </p>
         )}
+
         <div className="row">
-          <Button onClick={prepare} disabled={busy}>{busy ? 'Setting up…' : 'Set up my domain'}</Button>
+          <Button onClick={() => go('checkout', {
+            domain: info.domain, ownDomain: true, quote: q,
+            registrar: info.registrar, walkthroughKey: info.walkthroughKey,
+          })}>Continue to checkout</Button>
           <button className="btn btn--ghost" onClick={() => { setInfo(null); setErr(null); }}>Different domain</button>
         </div>
-        <p className="muted">Nothing changes on your domain yet — this just prepares your side.</p>
+        {err && <p className="ask__err">{err}</p>}
+      </div>
+    );
+  }
+
+  // Stage 2b — paid, so prepare our side (deploy + zone) and hand over the nameservers.
+  if (project.paid && !conn) {
+    return (
+      <div className="center container">
+        <p className="eyebrow">Step 3 of 3</p>
+        <h1>Ready to connect {project.domain || info?.domain}</h1>
+        <p className="sub">I'll deploy your site and set up DNS, then show you the one setting to change.</p>
+        <Button onClick={prepare} disabled={busy}>{busy ? 'Setting up…' : 'Set up my domain'}</Button>
+        <p className="muted">Nothing changes on your domain until you enter the nameservers yourself.</p>
         {err && <p className="ask__err">{err}</p>}
       </div>
     );

@@ -9,10 +9,15 @@ export default function Checkout({ go, project }) {
 
   async function pay() {
     setLoading(true);
-    const { url } = await createCheckout({ domain: project.domain, slug: project.slug, previewId: project.previewId, email });
+    const { url } = await createCheckout({
+      domain: project.domain, slug: project.slug, previewId: project.previewId, email,
+      ownDomain: !!project.ownDomain,
+    });
     // In production: window.location = url;  (Stripe-hosted page)
     setLoading(false);
-    go('launching'); // demo: skip straight to launch status
+    // Own-domain clients go back to the connect step for their walkthrough; new domains
+    // go to the automated launch.
+    go(project.ownDomain ? 'domain' : 'launching', { paid: true });
   }
 
   return (
@@ -26,7 +31,11 @@ export default function Checkout({ go, project }) {
         </div>
         <div className="card" style={{ textAlign: 'left' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between' }}><span className="muted">Total (first term)</span><strong>${project.quote?.total?.toFixed(2) ?? '—'}</strong></div>
-          <p className="muted" style={{ margin: '8px 0 0' }}>Itemized: domain + hosting/SSL/email + service fee. Renews yearly; cancel anytime.</p>
+          <p className="muted" style={{ margin: '8px 0 0' }}>
+            {project.ownDomain
+              ? `Hosting, SSL & email + service fee. No domain charge — you keep ${project.domain} at ${project.registrar || 'your registrar'} and keep paying that renewal. Renews yearly; cancel anytime.`
+              : 'Itemized: domain + hosting/SSL/email + service fee. Renews yearly; cancel anytime.'}
+          </p>
         </div>
         <Button disabled={loading || !email.includes('@')} onClick={pay} style={{ justifyContent: 'center' }}>{loading ? 'Opening secure checkout…' : 'Pay & launch'}</Button>
         <p className="muted">Test mode: no real charge. Pay on the next (Stripe) screen.</p>
