@@ -10,6 +10,8 @@ import DomainStep from './screens/DomainStep.jsx';
 import Checkout from './screens/Checkout.jsx';
 import Launching from './screens/Launching.jsx';
 import Dashboard from './screens/Dashboard.jsx';
+import Admin from './screens/Admin.jsx';
+import { getMe, signOut, claimBuilds } from './api/engine.js';
 
 // Wizard state persists to localStorage so a reload (or bouncing out to the live preview
 // on mobile, which evicts the tab) restores the person right where they were instead of
@@ -17,6 +19,24 @@ import Dashboard from './screens/Dashboard.jsx';
 // mid-generation would poll a dead job — so it falls forward to the editor if a preview
 // already exists, otherwise back to landing.
 const STORAGE_KEY = 'dksites-project-v1';
+// Previews made while signed out. They're attached to the account on sign-in, so nobody
+// loses the site they built before creating an account.
+const BUILDS_KEY = 'dksites-my-builds';
+
+function rememberBuild(b) {
+  try {
+    const list = JSON.parse(localStorage.getItem(BUILDS_KEY)) || [];
+    const rest = list.filter((x) => x.previewId !== b.previewId);
+    localStorage.setItem(BUILDS_KEY, JSON.stringify([b, ...rest].slice(0, 20)));
+  } catch {}
+}
+function pendingBuilds() {
+  try { return JSON.parse(localStorage.getItem(BUILDS_KEY)) || []; } catch { return []; }
+}
+const buildRecord = (p) => ({
+  previewId: p.previewId, slug: p.slug || null, previewUrl: p.previewUrl || null,
+  name: p.business?.name || p.name || null,
+});
 
 function loadSaved() {
   try { return JSON.parse(localStorage.getItem(STORAGE_KEY)) || null; } catch { return null; }
@@ -36,7 +56,8 @@ function canEnter(step, project = {}) {
     case 'checkout':
       return !!project.previewUrl && !!project.domain;
     case 'dashboard':
-      return !!project.domain;
+    case 'admin':
+      return true; // each screen shows sign-in / admins-only itself
     default:
       return false;
   }
@@ -54,6 +75,10 @@ export default function App() {
   const saved = loadSaved();
   const [step, setStep] = useState(safeStep(saved));
   const [project, setProject] = useState(saved?.project || {});
+  const [user, setUser] = useState(null);
+  const [googleClientId, setGoogleClientId] = useState(null);
+  const [banner, setBanner] = useState(null);
+  const [checkoutNotice, setCheckoutNotice] = useState(null);
 
   // Refs so the popstate handler always sees CURRENT state — it's registered once, and a
   // stale closure was how Forward could land you somewhere that no longer exists.
@@ -91,15 +116,80 @@ export default function App() {
     return () => window.removeEventListener('popstate', onPop);
   }, []);
 
-  const go = (next, patch = {}) => {
+  const userRef = useRef(user);
+  useEffect(() => { userRef.current = user; }, [user]);
+
+  const go = (next, patch = {}, { fresh = false } = {}) => {
     setProject((p) => {
-      const np = { ...p, ...patch };
+      const np = fresh ? { ...patch } : { ...p, ...patch };
       try { localStorage.setItem(STORAGE_KEY, JSON.stringify({ step: next, project: np })); } catch {}
+      // A new preview just came back: remember it so it can be attached to an account.
+      if (patch.previewId && patch.previewId !== p.previewId) {
+        const rec = buildRecord(np);
+        if (userRef.current) claimBuilds([rec]).catch(() => rememberBuild(rec));
+        else rememberBuild(rec);
+      }
       return np;
     });
     setStep(next);
     try { window.history.pushState({ dksitesStep: next }, ''); } catch {}
   };
+
+  // Attach any previews made while signed out to the account that just signed in.
+  const claimPending = async () => {
+    const list = pendingBuilds();
+    if (!list.length) return;
+    try { await claimBuilds(list); localStorage.removeItem(BUILDS_KEY); } catch {}
+  };
+
+  const onSignedIn = (u) => {
+    setUser(u || null);
+    if (u) claimPending();
+  };
+
+  const doSignOut = async () => {
+    try { await signOut(); } catch {}
+    setUser(null);
+    if (stepRef.current === 'dashboard' || stepRef.current === 'admin') go('landing');
+  };
+
+  // On load: who's signed in, and what did a redirect (email link, Stripe) bring us back for?
+  useEffect(() => {
+    const q = new URLSearchParams(window.location.search);
+    const hadParams = ['signedin', 'signin', 'checkout', 'view', 'session_id'].some((k) => q.has(k));
+    if (hadParams) window.history.replaceState({ dksitesStep: stepRef.current }, '', window.location.pathname);
+
+    getMe()
+      .then(({ user: u, googleClientId: gid }) => {
+        setGoogleClientId(gid || null);
+        onSignedIn(u);
+      })
+      .catch(() => {})
+      .finally(() => {
+        const p = projectRef.current || {};
+        if (q.get('signin') === 'expired') {
+          setBanner('That sign-in link expired or was already used. Send yourself a new one.');
+        }
+        if (q.get('checkout') === 'success') {
+          // Paid. Back to this browser's build if we have it, else to the dashboard.
+          if (p.previewUrl && p.domain) go(p.ownDomain ? 'domain' : 'launching', { paid: true });
+          else go('dashboard');
+        } else if (q.get('checkout') === 'cancel') {
+          setCheckoutNotice('Checkout canceled — nothing was charged.');
+          if (canEnter('checkout', p)) go('checkout');
+        } else if (q.get('view') === 'dashboard' || q.get('view') === 'admin') {
+          go(q.get('view'));
+        } else if (q.get('signedin') && stepRef.current === 'landing') {
+          go('dashboard'); // opened the email link somewhere with no build in progress
+        }
+      });
+  }, []);
+
+  const openBuild = (b) => go('editor', {
+    previewId: b.previewId, slug: b.slug || null, previewUrl: b.previewUrl || null,
+    business: b.name ? { name: b.name } : undefined,
+    ...(b.domain ? { domain: b.domain, ownDomain: !!b.ownDomain, live: true } : {}),
+  }, { fresh: true });
 
   const startFresh = () => {
     try { localStorage.removeItem(STORAGE_KEY); } catch {}
@@ -115,17 +205,39 @@ export default function App() {
     generating: <Generating go={go} project={project} />,
     editor: <Editor go={go} project={project} />,
     domain: <DomainStep go={go} project={project} />,
-    checkout: <Checkout go={go} project={project} />,
+    checkout: <Checkout go={go} project={project} user={user} googleClientId={googleClientId}
+      onSignedIn={onSignedIn} notice={checkoutNotice} />,
     launching: <Launching go={go} project={project} />,
-    dashboard: <Dashboard project={project} />,
+    dashboard: <Dashboard user={user} googleClientId={googleClientId} onSignedIn={onSignedIn}
+      openBuild={openBuild} go={(s) => (s === 'exists' ? go('exists', {}, { fresh: true }) : go(s))} />,
+    admin: <Admin user={user} />,
   };
 
   return (
     <div className="app-shell">
-      <div className="container" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid var(--line)', padding: '16px 24px' }}>
+      <div className="container" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid var(--line)', padding: '16px 24px', gap: 16 }}>
         <button onClick={() => setStep('landing')} style={{ background: 'none', border: 'none', cursor: 'pointer' }}><Logo /></button>
         <Progress step={step} />
+        <nav className="acct">
+          {user ? (
+            <>
+              <button className="acct__link" onClick={() => go('dashboard')}>Dashboard</button>
+              {user.isAdmin && <button className="acct__link" onClick={() => go('admin')}>Admin</button>}
+              <button className="acct__link acct__link--dim" onClick={doSignOut} title={user.email}>Sign out</button>
+            </>
+          ) : (
+            <button className="acct__link" onClick={() => go('dashboard')}>Sign in</button>
+          )}
+        </nav>
       </div>
+      {banner && (
+        <div className="container" style={{ paddingBottom: 0 }}>
+          <div className="alert" style={{ display: 'flex', justifyContent: 'space-between', gap: 12, margin: 0 }}>
+            <span>{banner}</span>
+            <button className="ask__x" style={{ position: 'static' }} onClick={() => setBanner(null)}>×</button>
+          </div>
+        </div>
+      )}
       {screens[step]}
     </div>
   );

@@ -6,16 +6,22 @@ const API = import.meta.env.VITE_ENGINE_URL || '';
 const MOCK = !API;
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 
-async function post(path, body) {
-  const r = await fetch(`${API}${path}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
-  if (!r.ok) throw new Error((await r.json().catch(() => ({}))).error || `HTTP ${r.status}`);
+// credentials: 'include' sends the session cookie. app.dksites.com and api.dksites.com
+// are the same site, so the cookie set by the API rides along on every call.
+async function call(path, init = {}) {
+  const r = await fetch(`${API}${path}`, { credentials: 'include', ...init });
+  if (!r.ok) {
+    const body = await r.json().catch(() => ({}));
+    const err = new Error(body.error || `HTTP ${r.status}`);
+    err.status = r.status;
+    err.needsSignIn = !!body.needsSignIn;
+    throw err;
+  }
   return r.json();
 }
-async function get(path) {
-  const r = await fetch(`${API}${path}`);
-  if (!r.ok) throw new Error((await r.json().catch(() => ({}))).error || `HTTP ${r.status}`);
-  return r.json();
-}
+const post = (path, body) =>
+  call(path, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body || {}) });
+const get = (path) => call(path);
 
 export async function lookupBusiness(name, city) {
   if (MOCK) { await wait(900); return { name: name || "Riley's Hot Dog & Burger Gourmet", address: '61 Glen St, New Britain, CT', rating: 4.7, userRatingCount: 931, photo: 'https://picsum.photos/seed/riley/400/300' }; }
@@ -129,4 +135,41 @@ export async function connectDomain(domain, previewId, slug) {
 export async function domainStatus(domain, zoneId) {
   if (MOCK) { await wait(800); return { domain, zoneStatus: 'pending', active: false, serving: false, ssl: 'pending' }; }
   return get(`/api/domain/status?domain=${encodeURIComponent(domain)}&zoneId=${encodeURIComponent(zoneId)}`);
+}
+
+// ---- Accounts ------------------------------------------------------------------
+export const hasEngine = !MOCK;
+export const apiUrl = (path) => `${API}${path}`;
+
+export async function getMe() {
+  if (MOCK) return { user: null, googleClientId: null };
+  return get('/api/auth/me');
+}
+export async function sendMagicLink(email) {
+  if (MOCK) { await wait(700); return { sent: true }; }
+  return post('/api/auth/email', { email });
+}
+export async function signInWithGoogle(credential) {
+  return post('/api/auth/google', { credential });
+}
+export async function signOut() {
+  if (MOCK) return { ok: true };
+  return post('/api/auth/logout', {});
+}
+export async function claimBuilds(builds) {
+  if (MOCK || !builds?.length) return { results: [] };
+  return post('/api/builds/claim', { builds });
+}
+export async function getMySites() {
+  if (MOCK) return { builds: [], sites: [] };
+  return get('/api/me/sites');
+}
+export async function openBillingPortal() {
+  return post('/api/billing/portal', {});
+}
+export async function getAdminOverview() {
+  return get('/api/admin/overview');
+}
+export async function runReminders(dryRun = true) {
+  return post('/api/admin/run-reminders', { dryRun });
 }
