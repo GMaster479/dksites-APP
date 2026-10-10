@@ -173,3 +173,28 @@ export async function getAdminOverview() {
 export async function runReminders(dryRun = true) {
   return post('/api/admin/run-reminders', { dryRun });
 }
+
+// ---- Oct 10: launch progress, auto-renew switch, backups -------------------------
+// Real launch progress for the Launching screen (by Stripe checkout id, or by site id).
+export async function getLaunchStatus({ sessionId, siteId }) {
+  if (MOCK) { await wait(600); return { status: 'done', domain: 'example.com', steps: [] }; }
+  const q = sessionId ? `session_id=${encodeURIComponent(sessionId)}` : `site_id=${encodeURIComponent(siteId)}`;
+  return get(`/api/launch/status?${q}`);
+}
+// Turn auto-renew on/off. Turning ON may return { needsCard, url } — Stripe saves a card
+// (no charge today) and sends them back to the dashboard.
+export async function setAutoRenew(siteId, on) {
+  return post(`/api/sites/${encodeURIComponent(siteId)}/auto-renew`, { on });
+}
+export async function retryLaunch(siteId) {
+  return post(`/api/admin/sites/${encodeURIComponent(siteId)}/retry-launch`, {});
+}
+export async function markLaunched(siteId) {
+  return post(`/api/admin/sites/${encodeURIComponent(siteId)}/mark-launched`, {});
+}
+export async function getBackups() {
+  return get('/api/admin/backups');
+}
+export async function backupNow() {
+  return post('/api/admin/backup-now', {});
+}

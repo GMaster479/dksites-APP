@@ -1,12 +1,59 @@
 import { useEffect, useState } from 'react';
 import { Button } from '../components/Bits.jsx';
 import SignIn from '../components/SignIn.jsx';
-import { getMySites, openBillingPortal } from '../api/engine.js';
+import { getMySites, openBillingPortal, setAutoRenew } from '../api/engine.js';
 
 // Home base: every live site and every preview this account owns.
 const dateStr = (ms) =>
   ms ? new Date(ms).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '—';
 const money = (n) => (typeof n === 'number' ? `$${n.toFixed(2)}` : '—');
+
+// What the pill on a live-site card says. Customers never see raw launch errors.
+function sitePill(s) {
+  if (s.status !== 'active') return { text: s.status, cls: '' };
+  switch (s.launchStatus) {
+    case 'starting':
+    case 'running': return { text: 'Launching', cls: '' };
+    case 'needs_attention': return { text: 'Finishing up', cls: 'pill--warn' };
+    case 'error': return { text: 'Being fixed', cls: 'pill--err' };
+    default: return { text: 'Live', cls: 'pill--on' };
+  }
+}
+
+// The auto-renew switch. OFF is instant. ON is instant if a card is already saved;
+// otherwise Stripe saves one (no charge) and sends them back here.
+function AutoRenewSwitch({ site, onChanged }) {
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState(null);
+  const on = site.autoRenew;
+
+  async function flip() {
+    setErr(null);
+    if (on && !window.confirm(
+      `Turn off auto-renew for ${site.domain}?\n\nNothing will be charged next year. We’ll email you 30 and 7 days before ${dateStr(site.renewsAt)} so you can renew by hand.`
+    )) return;
+    setBusy(true);
+    try {
+      const r = await setAutoRenew(site.id, !on);
+      if (r.needsCard && r.url) { window.location.assign(r.url); return; }
+      onChanged({ ...site, autoRenew: !!r.autoRenew });
+    } catch (e) { setErr(e.message); }
+    setBusy(false);
+  }
+
+  return (
+    <>
+      <button type="button" role="switch" aria-checked={on} className={`switch ${on ? 'switch--on' : ''}`} onClick={flip} disabled={busy}>
+        <span className="switch__track" />
+        <span>{busy ? (on ? 'Turning off…' : 'One moment…') : on ? 'On' : 'Off'}</span>
+      </button>
+      <span className="muted" style={{ display: 'block', fontSize: '.82rem', marginTop: 4 }}>
+        {on ? 'Renews by itself. You’ll still get a heads-up email first.' : 'We’ll email you 30 & 7 days before.'}
+      </span>
+      {err && <span className="ask__err" style={{ display: 'block', marginTop: 4 }}>{err}</span>}
+    </>
+  );
+}
 
 export default function Dashboard({ user, googleClientId, onSignedIn, openBuild, go }) {
   const [data, setData] = useState(null);
@@ -75,12 +122,13 @@ export default function Dashboard({ user, googleClientId, onSignedIn, openBuild,
                 <div className="card" key={s.id}>
                   <div className="dash__row">
                     <h2 style={{ wordBreak: 'break-all' }}>{s.domain}</h2>
-                    <span className={`pill ${s.status === 'active' ? 'pill--on' : ''}`}>{s.status === 'active' ? 'Live' : s.status}</span>
+                    <span className={`pill ${sitePill(s).cls}`}>{sitePill(s).text}</span>
                   </div>
                   <dl className="dash__facts">
                     <dt>Paid</dt><dd>{money(s.amount)} · {dateStr(s.paidAt)}</dd>
                     <dt>Renews</dt><dd>{dateStr(s.renewsAt)}</dd>
-                    <dt>Auto-renew</dt><dd>{s.autoRenew ? 'On' : 'Off — we’ll email you 30 & 7 days before'}</dd>
+                    <dt>Auto-renew</dt>
+                    <dd><AutoRenewSwitch site={s} onChanged={(ns) => setData((d) => ({ ...d, sites: d.sites.map((x) => (x.id === ns.id ? ns : x)) }))} /></dd>
                     {s.ownDomain && <><dt>Domain</dt><dd>Yours — keep it paid at your registrar</dd></>}
                   </dl>
                   <div className="row" style={{ justifyContent: 'flex-start', marginTop: 14 }}>

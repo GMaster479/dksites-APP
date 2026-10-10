@@ -55,6 +55,8 @@ function canEnter(step, project = {}) {
       return !!project.previewUrl;
     case 'checkout':
       return !!project.previewUrl && !!project.domain;
+    case 'launching':
+      return !!project.stripeSessionId; // real launch progress needs the Stripe checkout id
     case 'dashboard':
     case 'admin':
       return true; // each screen shows sign-in / admins-only itself
@@ -65,6 +67,7 @@ function canEnter(step, project = {}) {
 
 function safeStep(saved) {
   if (!saved?.step) return 'landing';
+  if (saved.step === 'launching' && saved.project?.stripeSessionId) return 'launching'; // resumes polling
   if (saved.step === 'generating' || saved.step === 'launching') {
     return saved.project?.previewUrl ? 'editor' : 'landing';
   }
@@ -100,7 +103,7 @@ export default function App() {
       const raw = e.state?.dksitesStep;
       if (!raw) return;
       // generating/launching are transient — never restore into a dead poll.
-      const target = raw === 'generating' || raw === 'launching'
+      const target = raw === 'generating' || (raw === 'launching' && !p.stripeSessionId)
         ? (p.previewUrl ? 'editor' : 'landing')
         : raw;
 
@@ -156,7 +159,7 @@ export default function App() {
   // On load: who's signed in, and what did a redirect (email link, Stripe) bring us back for?
   useEffect(() => {
     const q = new URLSearchParams(window.location.search);
-    const hadParams = ['signedin', 'signin', 'checkout', 'view', 'session_id'].some((k) => q.has(k));
+    const hadParams = ['signedin', 'signin', 'checkout', 'view', 'session_id', 'autorenew'].some((k) => q.has(k));
     if (hadParams) window.history.replaceState({ dksitesStep: stepRef.current }, '', window.location.pathname);
 
     getMe()
@@ -171,13 +174,18 @@ export default function App() {
           setBanner('That sign-in link expired or was already used. Send yourself a new one.');
         }
         if (q.get('checkout') === 'success') {
-          // Paid. Back to this browser's build if we have it, else to the dashboard.
-          if (p.previewUrl && p.domain) go(p.ownDomain ? 'domain' : 'launching', { paid: true });
+          // Paid. Own domain: back to the connect walkthrough. Otherwise: live launch progress,
+          // which works even in a different browser than the one that built the site.
+          const sid = q.get('session_id');
+          if (p.ownDomain && p.previewUrl && p.domain) go('domain', { paid: true });
+          else if (sid) go('launching', { paid: true, stripeSessionId: sid });
           else go('dashboard');
         } else if (q.get('checkout') === 'cancel') {
           setCheckoutNotice('Checkout canceled — nothing was charged.');
           if (canEnter('checkout', p)) go('checkout');
         } else if (q.get('view') === 'dashboard' || q.get('view') === 'admin') {
+          if (q.get('autorenew') === 'on') setBanner({ ok: true, text: 'Card saved — auto-renew is on. Nothing was charged today.' });
+          if (q.get('autorenew') === 'cancel') setBanner('No card was saved, so auto-renew is still off.');
           go(q.get('view'));
         } else if (q.get('signedin') && stepRef.current === 'landing') {
           go('dashboard'); // opened the email link somewhere with no build in progress
@@ -232,8 +240,8 @@ export default function App() {
       </div>
       {banner && (
         <div className="container" style={{ paddingBottom: 0 }}>
-          <div className="alert" style={{ display: 'flex', justifyContent: 'space-between', gap: 12, margin: 0 }}>
-            <span>{banner}</span>
+          <div className={banner.ok ? 'notice' : 'alert'} style={{ display: 'flex', justifyContent: 'space-between', gap: 12, margin: 0 }}>
+            <span>{typeof banner === 'string' ? banner : banner.text}</span>
             <button className="ask__x" style={{ position: 'static' }} onClick={() => setBanner(null)}>×</button>
           </div>
         </div>

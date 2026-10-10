@@ -160,3 +160,24 @@ a:hover{color:var(--off-white)}
 .table tr:last-child td{border-bottom:none}
 /* Phone: progress bar drops to its own row under the logo + account links */
 @media(max-width:640px){.app-shell>.container:first-child{flex-wrap:wrap;row-gap:12px}.app-shell>.container:first-child>.progress{order:3;flex-basis:100%}}
+
+/* ---- Oct 10: real launch progress, auto-renew switch, admin backups ---- */
+.launch{text-align:left;margin:8px auto 18px}
+.launch__step{display:flex;gap:12px;align-items:flex-start;padding:4px 0;color:var(--off-white)}
+.launch__step--pending{opacity:.4}
+.launch__icon{width:22px;height:22px;flex-shrink:0;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;font-size:.8rem;border:1px solid var(--line-strong);color:var(--silver);margin-top:1px}
+.launch__step--done .launch__icon,.launch__step--skipped .launch__icon{background:var(--off-white);color:var(--black);border-color:var(--off-white)}
+.launch__step--running .launch__icon{border-color:var(--off-white);border-top-color:transparent;animation:spin 1s linear infinite;color:transparent}
+.launch__step--warning .launch__icon{border-color:#E8C98A;color:#E8C98A}
+.launch__step--error .launch__icon{border-color:#E5A3A3;color:#E5A3A3}
+.launch__detail{display:block;font-size:.82rem;margin-top:2px}
+.switch{display:inline-flex;align-items:center;gap:10px;background:none;border:0;padding:0;color:var(--off-white);font:inherit;cursor:pointer;text-align:left}
+.switch:disabled{opacity:.5;cursor:default}
+.switch__track{width:38px;height:22px;border-radius:11px;background:var(--surface);border:1px solid var(--line-strong);position:relative;flex-shrink:0;transition:background .15s}
+.switch__track::after{content:"";position:absolute;top:2px;left:2px;width:16px;height:16px;border-radius:50%;background:var(--steel);transition:transform .15s,background .15s}
+.switch--on .switch__track{background:var(--off-white);border-color:var(--off-white)}
+.switch--on .switch__track::after{transform:translateX(16px);background:var(--black)}
+.switch:focus-visible .switch__track{outline:2px solid var(--silver);outline-offset:2px}
+.pill--warn{color:#E8C98A;border-color:rgba(232,201,138,.5)}
+.pill--err{color:#E5A3A3;border-color:rgba(229,163,163,.5)}
+.notice{background:var(--card-bg);border:1px solid var(--line);border-radius:var(--radius);padding:12px 16px;margin-bottom:16px}
