@@ -11,7 +11,7 @@ import Checkout from './screens/Checkout.jsx';
 import Launching from './screens/Launching.jsx';
 import Dashboard from './screens/Dashboard.jsx';
 import Admin from './screens/Admin.jsx';
-import { getMe, signOut, claimBuilds } from './api/engine.js';
+import { getMe, signOut, claimBuilds, getLaunchStatus } from './api/engine.js';
 
 // Wizard state persists to localStorage so a reload (or bouncing out to the live preview
 // on mobile, which evicts the tab) restores the person right where they were instead of
@@ -198,6 +198,9 @@ export default function App() {
           // Paid. Own domain: back to the connect walkthrough. Otherwise: live launch progress,
           // which works even in a different browser than the one that built the site.
           const sid = q.get('session_id');
+          // Own-domain buyers skip the Launching screen, so nudge the engine to record the
+          // purchase now (it checks Stripe directly if the webhook hasn't arrived).
+          if (sid && p.ownDomain) getLaunchStatus({ sessionId: sid }).catch(() => {});
           if (p.ownDomain && p.previewUrl && p.domain) go('domain', { paid: true });
           else if (sid) go('launching', { paid: true, stripeSessionId: sid });
           else go('dashboard');

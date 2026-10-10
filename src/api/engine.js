@@ -195,6 +195,9 @@ export async function markLaunched(siteId) {
 export async function getBackups() {
   return get('/api/admin/backups');
 }
+export async function syncStripe() {
+  return post('/api/admin/sync-stripe', {});
+}
 export async function backupNow() {
   return post('/api/admin/backup-now', {});
 }

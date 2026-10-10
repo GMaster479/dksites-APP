@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Button } from '../components/Bits.jsx';
-import { getAdminOverview, runReminders, apiUrl, retryLaunch, markLaunched, getBackups, backupNow } from '../api/engine.js';
+import { getAdminOverview, runReminders, apiUrl, retryLaunch, markLaunched, getBackups, backupNow, syncStripe } from '../api/engine.js';
 
 // Admin view (only for emails listed in ADMIN_EMAILS on the server). Who signed up, what
 // sold, what renews soon, and the renewal-reminder controls.
@@ -20,6 +20,7 @@ export default function Admin({ user }) {
   const [busy, setBusy] = useState(false);
   const [backups, setBackups] = useState(null);
   const [backupBusy, setBackupBusy] = useState(false);
+  const [syncMsg, setSyncMsg] = useState(null);
 
   const load = () => getAdminOverview().then(setData).catch((e) => setErr(e.message));
   const loadBackups = () => getBackups().then(setBackups).catch(() => {});
@@ -35,6 +36,14 @@ export default function Admin({ user }) {
   async function markDone(s) {
     if (!window.confirm(`Mark ${s.domain} as launched? Only do this after fixing it by hand (e.g. setting the nameservers at Namecheap).`)) return;
     try { await markLaunched(s.id); load(); } catch (e) { setErr(e.message); }
+  }
+  async function doSync() {
+    setErr(null); setSyncMsg('Checking Stripe…');
+    try {
+      const r = await syncStripe();
+      setSyncMsg(r.recorded ? `Recorded ${r.recorded} missing purchase${r.recorded === 1 ? '' : 's'}: ${r.found.map((f) => f.domain).join(', ')}. Each has a Retry button below.` : 'Everything in Stripe is already recorded.');
+      load();
+    } catch (e) { setSyncMsg(null); setErr(`Stripe sync: ${e.message}`); }
   }
   async function doBackup() {
     setBackupBusy(true); setErr(null);
@@ -117,7 +126,11 @@ export default function Admin({ user }) {
 
       {data && (
         <>
-          <h2 style={{ marginTop: 30 }}>Paid sites</h2>
+          <div className="dash__head" style={{ marginTop: 30 }}>
+            <h2>Paid sites</h2>
+            <button className="chip" onClick={doSync} title="Find paid Stripe checkouts (last 30 days) that never reached the server">Sync from Stripe</button>
+          </div>
+          {syncMsg && <p className="muted" style={{ margin: '0 0 10px' }}>{syncMsg}</p>}
           <div className="table-wrap">
             <table className="table">
               <thead><tr><th>Domain</th><th>Account</th><th>Launch</th><th>Paid</th><th>Renews</th><th>Auto</th><th>Own domain</th><th>Reminders</th></tr></thead>
