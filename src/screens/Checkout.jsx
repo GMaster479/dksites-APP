@@ -69,7 +69,9 @@ export default function Checkout({ go, project, user, googleClientId, onSignedIn
             <strong>Renew automatically next year</strong>
             <span className="muted" style={{ display: 'block', marginTop: 2 }}>
               Optional. Saves your card so the site never lapses. Either way you’ll get an email 30 and 7 days before
-              your renewal date, and you can turn this off anytime. {autoRenew && 'Card or Link only (Cash App can’t be saved).'}
+              your renewal date, and you can turn this off anytime from your dashboard.{' '}
+              <a href="/terms.html#renewals" target="_blank" rel="noreferrer">Renewal terms</a>.
+              {autoRenew && ' Card or Link only (Cash App can’t be saved).'}
             </span>
           </span>
         </label>
@@ -79,6 +81,11 @@ export default function Checkout({ go, project, user, googleClientId, onSignedIn
         </Button>
         {err && <p className="ask__err" style={{ margin: 0 }}>{err}</p>}
         <p className="muted">You’ll pay on Stripe’s secure page, then come right back here.</p>
+        <p className="muted" style={{ fontSize: '.82rem', margin: 0 }}>
+          By paying you agree to the <a href="/terms.html" target="_blank" rel="noreferrer">Terms</a>{' '}
+          (including <a href="/terms.html#refunds" target="_blank" rel="noreferrer">refunds</a>) and{' '}
+          <a href="/privacy.html" target="_blank" rel="noreferrer">Privacy Policy</a>.
+        </p>
       </div>
     </div>
   );

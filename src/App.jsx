@@ -247,6 +247,14 @@ export default function App() {
         </div>
       )}
       {screens[step]}
+      <footer className="site-foot">
+        <span>© {new Date().getFullYear()} DK Sites LLC</span>
+        <nav>
+          <a href="/privacy.html">Privacy</a>
+          <a href="/terms.html">Terms</a>
+          <a href="mailto:dylan@dksitesllc.com">Contact</a>
+        </nav>
+      </footer>
     </div>
   );
 }

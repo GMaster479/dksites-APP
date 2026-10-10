@@ -94,6 +94,10 @@ export default function SignIn({ googleClientId, onSignedIn, heading = 'Sign in'
       )}
       {err && <p className="ask__err">{err}</p>}
       <p className="muted" style={{ margin: '14px 0 0', fontSize: '.8rem' }}>No password needed. New here? This creates your account.</p>
+      <p className="signin__legal">
+        By continuing, you agree to the <a href="/terms.html" target="_blank" rel="noreferrer">Terms</a> and{' '}
+        <a href="/privacy.html" target="_blank" rel="noreferrer">Privacy Policy</a>.
+      </p>
     </div>
   );
 }
