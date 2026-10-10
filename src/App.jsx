@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, Component } from 'react';
 import { Logo, Progress } from './components/Bits.jsx';
 import Landing from './screens/Landing.jsx';
 import ExistsQuestion from './screens/ExistsQuestion.jsx';
@@ -72,6 +72,27 @@ function safeStep(saved) {
     return saved.project?.previewUrl ? 'editor' : 'landing';
   }
   return canEnter(saved.step, saved.project || {}) ? saved.step : 'landing';
+}
+
+// If a screen ever crashes, show a way out instead of a blank page.
+class ScreenBoundary extends Component {
+  constructor(props) { super(props); this.state = { error: null }; }
+  static getDerivedStateFromError(error) { return { error }; }
+  componentDidUpdate(prev) { if (prev.step !== this.props.step && this.state.error) this.setState({ error: null }); }
+  render() {
+    if (!this.state.error) return this.props.children;
+    return (
+      <div className="center container">
+        <h1>Something went wrong</h1>
+        <p className="sub">That screen hit an error. Your work is saved — go back or open your dashboard.</p>
+        <p className="muted" style={{ fontSize: '.8rem', maxWidth: 520, wordBreak: 'break-word' }}>{String(this.state.error?.message || this.state.error)}</p>
+        <div className="row">
+          <button className="btn btn--ghost" onClick={() => window.history.back()}>Go back</button>
+          <button className="btn btn--gold" onClick={this.props.onDashboard}>My dashboard</button>
+        </div>
+      </div>
+    );
+  }
 }
 
 export default function App() {
@@ -246,7 +267,7 @@ export default function App() {
           </div>
         </div>
       )}
-      {screens[step]}
+      <ScreenBoundary step={step} onDashboard={() => go('dashboard')}>{screens[step]}</ScreenBoundary>
       <footer className="site-foot">
         <span>© {new Date().getFullYear()} DK Sites LLC</span>
         <nav>

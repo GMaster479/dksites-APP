@@ -2,8 +2,9 @@ import { useState } from 'react';
 import { Button } from '../components/Bits.jsx';
 import { checkDomain, inspectDomain, connectDomain, domainStatus } from '../api/engine.js';
 
-export default function DomainStep({ go }) {
-  const [mode, setMode] = useState(null); // 'new' | 'own'
+export default function DomainStep({ go, project = {} }) {
+  // Back from paying for an own-domain site: go straight to the connect steps.
+  const [mode, setMode] = useState(project.ownDomain && project.paid ? 'own' : null); // 'new' | 'own'
   const [domain, setDomain] = useState('');
   const [quote, setQuote] = useState(null);
   const [loading, setLoading] = useState(false);
