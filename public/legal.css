@@ -1,25 +1,26 @@
 /* DK Sites Builder — legal pages (privacy.html, terms.html). Matches the app's monochrome look. */
 :root{
-  --black:#08080A;--surface:#17171A;--card:#1C1C20;--line:rgba(255,255,255,.10);
-  --text:#F4F4F5;--silver:#C9C9CE;--dim:#8A8A93;
-  --display:'Outfit',system-ui,sans-serif;--body:'Inter',system-ui,sans-serif;
+  --black:#15171B;--surface:#1D2025;--card:#1D2025;--line:rgba(242,236,222,.12);
+  --text:#F2ECDE;--silver:#C9C3B5;--dim:#8E897E;
+  --display:'Space Grotesk',system-ui,sans-serif;--body:'IBM Plex Sans',system-ui,sans-serif;
 }
 *,*::before,*::after{box-sizing:border-box}
 html{-webkit-text-size-adjust:100%}
-body{margin:0;background:var(--black);color:var(--text);font-family:var(--body);line-height:1.65;-webkit-font-smoothing:antialiased}
+body{margin:0;background:var(--black);color:var(--text);font-family:var(--body);font-size:17px;line-height:1.65;-webkit-font-smoothing:antialiased}
 a{color:var(--text);text-underline-offset:3px;text-decoration-color:rgba(255,255,255,.35)}
 a:hover{text-decoration-color:var(--text)}
 .top{border-bottom:1px solid var(--line)}
 .top__in,.wrap,.foot__in{max-width:760px;margin:0 auto;padding:0 20px}
 .top__in{display:flex;justify-content:space-between;align-items:center;gap:16px;padding-top:16px;padding-bottom:16px;flex-wrap:wrap}
-.brand{display:flex;align-items:baseline;gap:8px;text-decoration:none}
-.brand__word{font-family:var(--display);font-weight:700;font-size:1.25rem;letter-spacing:.02em}
-.brand__sub{font-family:var(--display);font-size:.68rem;letter-spacing:.2em;color:var(--dim)}
+.brand{display:flex;align-items:center;gap:10px;text-decoration:none}
+.brand img{display:block;width:30px;height:30px}
+.brand__word{font-family:var(--display);font-weight:600;font-size:1.1rem}
+.brand__sub{font-family:var(--display);font-size:1.1rem;color:var(--dim)}
 .top nav{display:flex;gap:18px;font-size:.92rem}
 .top nav a{text-decoration:none;color:var(--dim)}
 .top nav a[aria-current="page"],.top nav a:hover{color:var(--text)}
 .wrap{padding-top:44px;padding-bottom:64px}
-.eyebrow{font-size:.72rem;letter-spacing:.16em;text-transform:uppercase;color:var(--dim);margin:0 0 8px}
+.eyebrow{font-family:var(--display);font-size:.95rem;color:var(--silver);margin:0 0 8px}
 h1{font-family:var(--display);font-weight:600;font-size:clamp(2rem,6vw,2.8rem);line-height:1.1;margin:0 0 10px}
 .meta{color:var(--dim);font-size:.92rem;margin:0 0 28px}
 .summary{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:18px 20px;margin:0 0 36px}
@@ -34,7 +35,7 @@ li{margin:4px 0}
 .table-wrap{overflow-x:auto;border:1px solid var(--line);border-radius:12px;margin:12px 0}
 table{width:100%;border-collapse:collapse;font-size:.9rem;min-width:520px}
 th,td{text-align:left;padding:10px 14px;border-bottom:1px solid var(--line);vertical-align:top;color:var(--silver)}
-th{font-size:.72rem;letter-spacing:.1em;text-transform:uppercase;color:var(--dim);font-weight:500}
+th{font-family:var(--display);font-size:.85rem;color:var(--dim);font-weight:500}
 tr:last-child td{border-bottom:0}
 td:first-child{color:var(--text);white-space:nowrap}
 .foot{border-top:1px solid var(--line)}

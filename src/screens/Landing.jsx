@@ -1,27 +1,40 @@
 import { Button } from '../components/Bits.jsx';
 
-export default function Landing({ go, project, startFresh }) {
-  const hasBuild = Boolean(project?.previewUrl);
+export default function Landing({ go, project, startFresh, user }) {
+  const hasBuild = Boolean(project?.previewUrl) && !project?.live;
   return (
-    <div className="center container">
-      <p className="eyebrow">A DK Sites LLC Project</p>
-      <h1>An AI that builds your<br />business a <span className="wordmark">real website</span>.</h1>
-      <p className="sub">Hand-crafted quality, generated in minutes — then we put it live on your own domain. No templates. No page-builders. No monthly bloat.</p>
+    <div className="page">
       {hasBuild && (
-        <div className="card" style={{ maxWidth: 460, width: '100%', textAlign: 'left' }}>
-          <p className="eyebrow" style={{ marginBottom: 6 }}>Pick up where you left off</p>
-          <p className="muted" style={{ margin: '0 0 12px' }}>Your generated site is still here and ready to edit.</p>
-          <div className="row" style={{ justifyContent: 'flex-start' }}>
-            <Button onClick={() => go('editor')}>Resume editing →</Button>
-            <button className="chip" onClick={startFresh}>Start a new site</button>
+        <div className="card" style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+          <h2>Pick up where you left off</h2>
+          <p className="muted" style={{ margin: 0 }}>
+            {project.business?.name || 'Your site'} is saved and ready for changes.
+          </p>
+          <div className="row">
+            <Button onClick={() => go('editor')}>Keep editing my site</Button>
+            <Button variant="ghost" onClick={startFresh}>Start a different site</Button>
           </div>
         </div>
       )}
+
+      <h1>A real website for your business, ready in minutes.</h1>
+      <p className="sub">
+        Tell us your business name. We build the site from your Google listing, your photos and your
+        reviews. You make changes by just asking, and it goes live on your own web address.
+      </p>
       <div className="row">
-        <Button onClick={() => go('exists')}>Build my site — free preview</Button>
-        <a className="btn btn--ghost" href="https://dksitesllc.com">See our work</a>
+        <Button onClick={() => go('exists', {}, { fresh: !hasBuild ? true : false })}>Build my free preview</Button>
+        {user && <Button variant="ghost" onClick={() => go('dashboard')}>Go to my sites</Button>}
       </div>
-      <p className="muted">Free to preview. You only pay when you love it and go live.</p>
+
+      <ul className="landing-facts">
+        <li><strong>Free to try.</strong> Build and change it as much as you like. You only pay when it goes live.</li>
+        <li><strong>No tech skills needed.</strong> Ask for changes in plain words. Each change only touches what you asked for.</li>
+        <li><strong>It’s yours.</strong> Your web address, your site, and a real person to call: DK Sites, based in Connecticut.</li>
+      </ul>
+      <p className="muted" style={{ margin: 0 }}>
+        Want it built by hand instead? <a href="https://dksitesllc.com">See DK Sites’ custom work</a>.
+      </p>
     </div>
   );
 }

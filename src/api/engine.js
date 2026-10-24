@@ -56,6 +56,10 @@ export async function applyEdit(previewId, change, onStage) {
     previewId,
     slug: change.slug || null,
     instruction: change.instruction || change.prompt || null,
+    instructions: change.instructions || [],
+    setSocials: change.setSocials || null,
+    removeRequestId: change.removeRequestId || null,
+    redesign: change.redesign === true,
     logoFile: change.logoFile || null,
     menuFile: change.menuFile || null,
     menuFiles: change.menuFiles || [],
@@ -88,13 +92,30 @@ export async function importImage(previewId, url, kind = 'photo') {
 // and is handed to applyEdit when the person applies their changes.
 export async function uploadFile(previewId, kind, file) {
   if (MOCK) { await wait(800); return { kind, assetPath: `images/mock-${kind}.png`, path: '/mock' }; }
+  // Phone photos are often 4–10MB. Shrink them first (2400px, good quality) so uploads are
+  // fast on cell signal and never hit the size limit. Logos keep their exact pixels.
+  const ready = kind === 'photo' ? await shrinkImage(file) : file;
   const dataBase64 = await new Promise((resolve, reject) => {
     const r = new FileReader();
     r.onload = () => resolve(String(r.result).split(',')[1]);
     r.onerror = () => reject(new Error('Could not read that file.'));
-    r.readAsDataURL(file);
+    r.readAsDataURL(ready);
   });
-  return post('/api/upload', { previewId, kind, mimeType: file.type, dataBase64 });
+  return post('/api/upload', { previewId, kind, mimeType: ready.type, dataBase64 });
+}
+
+async function shrinkImage(file, max = 2400) {
+  if (!/^image\/(jpeg|png|webp)$/.test(file.type) || file.size < 1.5 * 1024 * 1024) return file;
+  try {
+    const bmp = await createImageBitmap(file);
+    const scale = Math.min(1, max / Math.max(bmp.width, bmp.height));
+    const canvas = document.createElement('canvas');
+    canvas.width = Math.round(bmp.width * scale);
+    canvas.height = Math.round(bmp.height * scale);
+    canvas.getContext('2d').drawImage(bmp, 0, 0, canvas.width, canvas.height);
+    const blob = await new Promise((res) => canvas.toBlob(res, 'image/jpeg', 0.85));
+    return blob && blob.size < file.size ? new File([blob], file.name.replace(/\.\w+$/, '.jpg'), { type: 'image/jpeg' }) : file;
+  } catch { return file; }
 }
 
 export async function checkDomain(domain) {
@@ -200,4 +221,23 @@ export async function syncStripe() {
 }
 export async function backupNow() {
   return post('/api/admin/backup-now', {});
+}
+
+// ---- Oct 24 ------------------------------------------------------------------------
+// Social profiles found on their current website, to pre-fill the form.
+export async function findSocials(website) {
+  if (MOCK || !website) return { socials: [] };
+  try { return await get(`/api/socials?website=${encodeURIComponent(website)}`); } catch { return { socials: [] }; }
+}
+// Remove a preview from the account (and take its preview page down).
+export async function deleteBuild(previewId) {
+  if (MOCK) { await wait(400); return { deleted: true }; }
+  return call(`/api/builds/${encodeURIComponent(previewId)}`, { method: 'DELETE' });
+}
+// A fresh id for a build that hasn't been generated yet, so logo/photo uploads at the
+// start have somewhere to go. The engine builds the site into this same folder.
+export function newDraftId() {
+  try { return crypto.randomUUID(); } catch {
+    return 'd' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 12);
+  }
 }

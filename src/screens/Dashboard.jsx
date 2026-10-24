@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
-import { Button } from '../components/Bits.jsx';
+import { Button, Confirm } from '../components/Bits.jsx';
 import SignIn from '../components/SignIn.jsx';
-import { getMySites, openBillingPortal, setAutoRenew } from '../api/engine.js';
+import { getMySites, openBillingPortal, setAutoRenew, deleteBuild } from '../api/engine.js';
 
 // Home base: every live site and every preview this account owns.
 const dateStr = (ms) =>
@@ -55,10 +55,25 @@ function AutoRenewSwitch({ site, onChanged }) {
   );
 }
 
-export default function Dashboard({ user, googleClientId, onSignedIn, openBuild, go }) {
+export default function Dashboard({ user, googleClientId, onSignedIn, openBuild, go, onDeleted, onSignOut }) {
   const [data, setData] = useState(null);
   const [err, setErr] = useState(null);
   const [billingBusy, setBillingBusy] = useState(false);
+  const [toDelete, setToDelete] = useState(null);
+  const [deleting, setDeleting] = useState(false);
+  const [note, setNote] = useState(null);
+
+  async function confirmDelete() {
+    const b = toDelete;
+    setDeleting(true); setErr(null);
+    try {
+      await deleteBuild(b.previewId);
+      setData((d) => ({ ...d, builds: d.builds.filter((x) => x.previewId !== b.previewId) }));
+      onDeleted?.(b.previewId);
+      setNote(`“${b.name || b.slug || 'Untitled site'}” was deleted.`);
+    } catch (e) { setErr(e.message); }
+    setDeleting(false); setToDelete(null);
+  }
 
   useEffect(() => {
     if (!user) return;
@@ -87,18 +102,21 @@ export default function Dashboard({ user, googleClientId, onSignedIn, openBuild,
 
   const sites = data?.sites || [];
   const liveIds = new Set(sites.map((s) => s.previewId));
-  const previews = (data?.builds || []).filter((b) => !liveIds.has(b.previewId));
+  // Drafts whose build never finished (uploads only) have no preview to show.
+  const previews = (data?.builds || []).filter((b) => !liveIds.has(b.previewId) && (b.previewUrl || b.slug));
   const canBill = sites.some((s) => s.canManageBilling);
   const previewUrlFor = (s) =>
     (data?.builds || []).find((b) => b.previewId === s.previewId)?.previewUrl || (s.slug ? `https://${s.slug}.dksites.com/` : null);
 
   return (
     <div className="container" style={{ paddingTop: 32 }}>
-      <p className="eyebrow">Your dashboard</p>
       <h1 style={{ marginBottom: 6 }}>{user.name ? `Hi, ${user.name.split(' ')[0]}` : 'Your sites'}</h1>
-      <p className="muted" style={{ margin: '0 0 22px' }}>{user.email}</p>
+      <p className="muted" style={{ margin: '0 0 22px' }}>
+        Signed in as {user.email} · <button className="link" style={{ color: 'inherit' }} onClick={onSignOut}>Sign out</button>
+      </p>
 
       {err && <div className="alert"><strong>Something went wrong.</strong> <span className="muted">{err}</span></div>}
+      {note && <div className="notice" role="status">{note}</div>}
       {!data && !err && <div className="spinner" style={{ margin: '40px auto' }} />}
 
       {data && (
@@ -145,11 +163,11 @@ export default function Dashboard({ user, googleClientId, onSignedIn, openBuild,
           )}
 
           <div className="dash__head" style={{ marginTop: 34 }}>
-            <h2>Previews</h2>
-            <button className="chip" onClick={() => go('exists')}>+ Build another</button>
+            <h2>Sites you’re still working on</h2>
+            <button className="chip" onClick={() => go('exists')}>+ Build another site</button>
           </div>
           {previews.length === 0 ? (
-            <div className="card dash__empty"><p className="muted" style={{ margin: 0 }}>Nothing in progress.</p></div>
+            <div className="card dash__empty"><p className="muted" style={{ margin: 0 }}>Nothing in progress. Build another site any time; previews are free.</p></div>
           ) : (
             <div className="grid2">
               {previews.map((b) => (
@@ -157,12 +175,21 @@ export default function Dashboard({ user, googleClientId, onSignedIn, openBuild,
                   <h2>{b.name || b.slug || 'Untitled site'}</h2>
                   <p className="muted" style={{ margin: '4px 0 14px' }}>Started {dateStr(b.claimedAt)}</p>
                   <div className="row" style={{ justifyContent: 'flex-start' }}>
-                    {b.previewUrl && <a className="btn btn--ghost" href={b.previewUrl} target="_blank" rel="noreferrer">Preview</a>}
                     <Button onClick={() => openBuild(b)}>Keep editing</Button>
+                    {b.previewUrl && <a className="btn btn--ghost" href={b.previewUrl} target="_blank" rel="noreferrer">View</a>}
+                    <Button variant="danger" onClick={() => setToDelete(b)}>Delete</Button>
                   </div>
                 </div>
               ))}
             </div>
+          )}
+
+          {toDelete && (
+            <Confirm title="Delete this preview?" yes="Delete it" danger busy={deleting}
+              onYes={confirmDelete} onNo={() => setToDelete(null)}>
+              <p style={{ margin: 0 }}><strong>{toDelete.name || toDelete.slug || 'Untitled site'}</strong> and its preview link will be removed for good, along with the photos you uploaded for it.</p>
+              <p className="muted" style={{ margin: '10px 0 0' }}>This can’t be undone. Your live sites aren’t affected.</p>
+            </Confirm>
           )}
 
           <div className="card" style={{ marginTop: 34 }}>

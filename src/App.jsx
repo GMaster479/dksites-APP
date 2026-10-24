@@ -1,5 +1,8 @@
 import { useState, useEffect, useRef, Component } from 'react';
-import { Logo, Progress } from './components/Bits.jsx';
+import { Logo, Progress, StepGuide, stepIndex } from './components/Bits.jsx';
+import Help from './components/Help.jsx';
+import InstallPrompt, { shouldOfferInstall, noteSignedInVisit } from './components/InstallPrompt.jsx';
+import Extras from './screens/Extras.jsx';
 import Landing from './screens/Landing.jsx';
 import ExistsQuestion from './screens/ExistsQuestion.jsx';
 import ConfirmBusiness from './screens/ConfirmBusiness.jsx';
@@ -50,6 +53,8 @@ function canEnter(step, project = {}) {
     case 'confirm':
     case 'describe':
       return true;
+    case 'extras':
+      return !!project.mode;
     case 'editor':
     case 'domain':
       return !!project.previewUrl;
@@ -171,6 +176,34 @@ export default function App() {
     if (u) claimPending();
   };
 
+  // Merge into the saved project without changing screens (e.g. the draft id for uploads).
+  const patch = (p) => setProject((prev) => {
+    const np = { ...prev, ...p };
+    try { localStorage.setItem(STORAGE_KEY, JSON.stringify({ step: stepRef.current, project: np })); } catch {}
+    return np;
+  });
+
+  const [showGuide, setShowGuide] = useState(false);
+  const [showHelp, setShowHelp] = useState(false);
+  const [showInstall, setShowInstall] = useState(false);
+
+  // "Save to your home screen": right after a site finishes building…
+  useEffect(() => {
+    if (step === 'editor' && project.justBuilt) {
+      patch({ justBuilt: false });
+      if (shouldOfferInstall('built')) setTimeout(() => setShowInstall(true), 2500);
+    }
+  }, [step, project.justBuilt]);
+  // …or when a signed-in owner comes back for a second visit.
+  useEffect(() => {
+    if (!user) return;
+    noteSignedInVisit();
+    if (shouldOfferInstall('returning') && stepRef.current !== 'generating' && stepRef.current !== 'launching') {
+      const t = setTimeout(() => setShowInstall(true), 4000);
+      return () => clearTimeout(t);
+    }
+  }, [user?.id]);
+
   const doSignOut = async () => {
     try { await signOut(); } catch {}
     setUser(null);
@@ -217,7 +250,10 @@ export default function App() {
       });
   }, []);
 
+  // fromDashboard: an owner opening an existing site, not someone in their first build —
+  // so the step ruler stays out of the way.
   const openBuild = (b) => go('editor', {
+    fromDashboard: true,
     previewId: b.previewId, slug: b.slug || null, previewUrl: b.previewUrl || null,
     business: b.name ? { name: b.name } : undefined,
     ...(b.domain ? { domain: b.domain, ownDomain: !!b.ownDomain, live: true } : {}),
@@ -229,8 +265,22 @@ export default function App() {
     setStep('landing');
   };
 
+  // A preview was deleted from the dashboard: forget it everywhere in this browser.
+  const onDeleted = (previewId) => {
+    try {
+      const list = JSON.parse(localStorage.getItem(BUILDS_KEY)) || [];
+      localStorage.setItem(BUILDS_KEY, JSON.stringify(list.filter((b) => b.previewId !== previewId)));
+      localStorage.removeItem(`dksites-pending-${previewId}`);
+    } catch {}
+    if (projectRef.current?.previewId === previewId) {
+      try { localStorage.removeItem(STORAGE_KEY); } catch {}
+      setProject({});
+    }
+  };
+
   const screens = {
-    landing: <Landing go={go} project={project} startFresh={startFresh} />,
+    landing: <Landing go={go} project={project} startFresh={startFresh} user={user} />,
+    extras: <Extras go={go} project={project} patch={patch} />,
     exists: <ExistsQuestion go={go} />,
     confirm: <ConfirmBusiness go={go} project={project} />,
     describe: <DescribeBusiness go={go} />,
@@ -241,27 +291,35 @@ export default function App() {
       onSignedIn={onSignedIn} notice={checkoutNotice} />,
     launching: <Launching go={go} project={project} />,
     dashboard: <Dashboard user={user} googleClientId={googleClientId} onSignedIn={onSignedIn}
-      openBuild={openBuild} go={(s) => (s === 'exists' ? go('exists', {}, { fresh: true }) : go(s))} />,
+      openBuild={openBuild} onDeleted={onDeleted} onSignOut={doSignOut}
+      go={(s) => (s === 'exists' ? go('exists', {}, { fresh: true }) : go(s))} />,
     admin: <Admin user={user} />,
   };
 
   return (
     <div className="app-shell">
-      <div className="container" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid var(--line)', padding: '16px 24px', gap: 16 }}>
-        <button onClick={() => setStep('landing')} style={{ background: 'none', border: 'none', cursor: 'pointer' }}><Logo /></button>
-        <Progress step={step} />
-        <nav className="acct">
-          {user ? (
-            <>
-              <button className="acct__link" onClick={() => go('dashboard')}>Dashboard</button>
-              {user.isAdmin && <button className="acct__link" onClick={() => go('admin')}>Admin</button>}
-              <button className="acct__link acct__link--dim" onClick={doSignOut} title={user.email}>Sign out</button>
-            </>
-          ) : (
-            <button className="acct__link" onClick={() => go('dashboard')}>Sign in</button>
-          )}
-        </nav>
-      </div>
+      <header className="topbar">
+        <div className="topbar__in">
+          <button className="brand" onClick={() => go(user ? 'dashboard' : 'landing')} aria-label="DK Sites Builder home"><Logo /></button>
+          <nav className="acct" aria-label="Account">
+            <button className="acct__link" onClick={() => setShowHelp(true)}>Help</button>
+            {user ? (
+              <>
+                <button className="acct__link" onClick={() => go('dashboard')}>My sites</button>
+                {user.isAdmin && <button className="acct__link acct__link--wide" onClick={() => go('admin')}>Admin</button>}
+                <button className="acct__link acct__link--dim acct__link--wide" onClick={doSignOut} title={user.email}>Sign out</button>
+              </>
+            ) : (
+              <button className="acct__link" onClick={() => go('dashboard')}>Sign in</button>
+            )}
+          </nav>
+        </div>
+        {/* The step ruler is for someone building their first site. An owner who opened an
+            existing site from their dashboard, or is editing a live one, doesn't need it. */}
+        {stepIndex(step) >= 0 && !project.fromDashboard && !project.live && (
+          <Progress step={step} onExplain={() => setShowGuide(true)} />
+        )}
+      </header>
       {banner && (
         <div className="container" style={{ paddingBottom: 0 }}>
           <div className={banner.ok ? 'notice' : 'alert'} style={{ display: 'flex', justifyContent: 'space-between', gap: 12, margin: 0 }}>
@@ -270,13 +328,18 @@ export default function App() {
           </div>
         </div>
       )}
-      <ScreenBoundary step={step} onDashboard={() => go('dashboard')}>{screens[step]}</ScreenBoundary>
+      <main id="main" style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
+        <ScreenBoundary step={step} onDashboard={() => go('dashboard')}>{screens[step]}</ScreenBoundary>
+      </main>
+      {showGuide && <StepGuide step={step} onClose={() => setShowGuide(false)} />}
+      {showHelp && <Help onClose={() => setShowHelp(false)} />}
+      {showInstall && !showGuide && !showHelp && <InstallPrompt onClose={() => setShowInstall(false)} />}
       <footer className="site-foot">
         <span>© {new Date().getFullYear()} DK Sites LLC</span>
         <nav>
           <a href="/privacy.html">Privacy</a>
           <a href="/terms.html">Terms</a>
-          <a href="mailto:dylan@dksitesllc.com">Contact</a>
+          <button className="link" style={{ color: 'inherit', fontSize: 'inherit', textDecoration: 'none', padding: 0 }} onClick={() => setShowHelp(true)}>Help & contact</button>
         </nav>
       </footer>
     </div>

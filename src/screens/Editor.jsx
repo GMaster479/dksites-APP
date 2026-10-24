@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Button } from '../components/Bits.jsx';
+import { Button, Confirm } from '../components/Bits.jsx';
 import { getEditOptions, applyEdit, uploadFile, importImage } from '../api/engine.js';
 
 // STAGED EDITOR
@@ -16,7 +16,7 @@ const dismissKey = (id) => `dksites-dismissed-${id || 'none'}`;
 // so they sit above everything else. They're also dismissable: nobody should be nagged.
 const ASK_KINDS = [
   { kind: 'logo',  test: /logo/i,                 cta: 'Upload logo',   accept: 'image/*',
-    done: 'Logo uploaded — palette will be rebuilt around it' },
+    done: 'Logo added — you can match the colors to it afterward' },
   { kind: 'menu',  test: /menu|tap list/i,        cta: 'Upload menu',   accept: 'image/*,application/pdf', multiple: true,
     done: 'Menu uploaded — real items will replace the placeholders', repeatable: true,
     more: 'Add another page' },
@@ -64,6 +64,11 @@ export default function Editor({ go, project }) {
   const [openPicker, setOpenPicker] = useState(null);
   const [applyStage, setApplyStage] = useState(null);
   const [applyError, setApplyError] = useState(null);
+  const [lastSummary, setLastSummary] = useState(null);
+  const [workingOn, setWorkingOn] = useState([]);        // what the "updating" screen lists
+  const [confirmUndo, setConfirmUndo] = useState(null);   // a standing request to undo
+  const [confirmRedesign, setConfirmRedesign] = useState(false);
+  const [socialText, setSocialText] = useState(null);     // null = not editing
   const frameRef = useRef(null);
 
   // Load options + restore any staged-but-unapplied changes from a previous visit.
@@ -194,13 +199,16 @@ export default function Editor({ go, project }) {
   async function applyAll() {
     if (!pending.length) return;
     setApplyError(null);
+    setWorkingOn(pending.map((p) => p.label));
     setApplying(true);
     setApplyStage('Sending your changes…');
 
-    const instruction = pending
-      .filter((p) => p.instruction)
-      .map((p, i) => `${i + 1}. ${p.instruction}`)
-      .join('\n');
+    // Each typed change goes on its own, so it can be undone on its own later. Color and
+    // font picks travel as structured settings, not as words.
+    const instructions = pending
+      .filter((p) => p.instruction && p.kind !== 'palette' && p.kind !== 'fonts')
+      .map((p) => p.instruction);
+    const setSocials = stagedOf('socials')?.payload || null;
     const uploads = pending.filter((p) => p.upload);
     const logoFile = uploads.find((u) => u.upload.kind === 'logo')?.upload.records[0] || null;
     const menuRecords = uploads.filter((u) => u.upload.kind === 'menu').flatMap((u) => u.upload.records);
@@ -212,19 +220,35 @@ export default function Editor({ go, project }) {
     const setFonts = stagedOf('fonts')?.payload || null;
 
     try {
-      await applyEdit(
+      const r = await applyEdit(
         project.previewId,
-        { instruction, slug: project.slug, logoFile, menuFile, menuFiles: menuRecords, photoFiles, setPalette, setFonts },
+        { instructions, slug: project.slug, logoFile, menuFile, menuFiles: menuRecords, photoFiles, setPalette, setFonts, setSocials },
         (stage) => setApplyStage(stage)
       );
+      setLastSummary(r?.summary || 'Your changes are on your site.');
       save([]);
       try { setOpts(await getEditOptions(project.previewId)); } catch {}
       setFrameKey((k) => k + 1);
       setApplying(false);
     } catch (e) {
-      setApplyError(e.message || 'Something went wrong while rebuilding.');
+      setApplyError(e.message || 'Something went wrong while making your changes.');
       setApplying(false);
     }
+  }
+
+  // One-off edits that don't go through the staged list: undo an earlier change, or start
+  // over with a fresh design. Both confirm first.
+  async function runNow(change, label) {
+    setApplyError(null); setWorkingOn([]); setApplying(true); setApplyStage(label);
+    try {
+      const r = await applyEdit(project.previewId, { slug: project.slug, ...change }, (stage) => setApplyStage(stage));
+      setLastSummary(r?.summary || 'Done.');
+      try { setOpts(await getEditOptions(project.previewId)); } catch {}
+      setFrameKey((k) => k + 1);
+    } catch (e) {
+      setApplyError(e.message || 'That didn’t go through. Your site wasn’t changed.');
+    }
+    setApplying(false);
   }
 
   // ---- Applying: show the person their own decisions while they wait ----
@@ -232,13 +256,11 @@ export default function Editor({ go, project }) {
     return (
       <div className="center container">
         <div className="spinner" />
-        <h1>Applying your changes</h1>
-        <p className="sub">{applyStage || 'Rebuilding your site with everything you picked.'} Usually 2–4 minutes.</p>
+        <h1>Updating your site</h1>
+        <p className="sub">{applyStage || 'Making your changes.'} Usually 1 to 3 minutes. Only what you asked for is changing.</p>
         <div className="stack" style={{ textAlign: 'left' }}>
-          {pending.map((p) => (
-            <div key={p.id} className="card" style={{ padding: '10px 14px' }}>
-              <span style={{ color: 'var(--silver)' }}>•</span> {p.label}
-            </div>
+          {workingOn.map((label, i) => (
+            <div key={i} className="card" style={{ padding: '10px 14px' }}>{label}</div>
           ))}
         </div>
       </div>
@@ -282,28 +304,35 @@ export default function Editor({ go, project }) {
       <section className="howto">
         <div className="howto__step">
           <span className="howto__n howto__n--done">✓</span>
-          <div><strong>Your site is built.</strong> <span className="muted">Generated from your business — it's live at the link below right now.</span></div>
+          <div><strong>{project.live ? 'Your site is live.' : 'Your site is built.'}</strong> <span className="muted">{project.live ? 'Changes you make here go straight to your real website.' : 'You can open it on any device with the preview link below.'}</span></div>
         </div>
         <div className="howto__step">
           <span className="howto__n">2</span>
-          <div><strong>Tell me what to change.</strong> <span className="muted">Pick colors or type, click any image to swap it, or just describe it in your own words. Stack up as many changes as you want — they collect in the list at the bottom.</span></div>
+          <div><strong>Tell me what to change.</strong> <span className="muted">Describe it in your own words, pick new colors or fonts, or tap a photo to swap it. Add as many as you like; they wait in a list until you’re ready.</span></div>
         </div>
         <div className="howto__step">
           <span className="howto__n">3</span>
-          <div><strong>Hit Apply changes and I rebuild the whole site.</strong> <span className="muted">This isn't a drag-and-drop editor — nothing changes as you click. I take everything at once and build it properly, which takes a couple of minutes.</span></div>
+          <div><strong>Press “Update my site”.</strong> <span className="muted">Only the things you asked for change. Everything else, including your earlier changes, stays exactly as it is. Takes a minute or two.</span></div>
         </div>
       </section>
 
+      {lastSummary && (
+        <div className="summary" role="status">
+          <div><strong style={{ fontFamily: 'var(--display)' }}>Your site is updated.</strong> <span className="muted" style={{ color: 'var(--paper-dim)' }}>{lastSummary}</span></div>
+          <button className="ask__x" style={{ position: 'static' }} onClick={() => setLastSummary(null)} aria-label="Dismiss">×</button>
+        </div>
+      )}
+
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14, flexWrap: 'wrap', gap: 8 }}>
-        <h2>Your site — make it yours</h2>
-        <label style={{ display: 'flex', gap: 8, alignItems: 'center', margin: 0, cursor: 'pointer' }}>
-          <input type="checkbox" checked={imgMode} onChange={(e) => setImgMode(e.target.checked)} />
-          Click an image to replace it
-        </label>
+        <h2>{project.business?.name || 'Your site'}</h2>
+        <button type="button" role="switch" aria-checked={imgMode} className={`switch ${imgMode ? 'switch--on' : ''}`} onClick={() => setImgMode(!imgMode)}>
+          <span className="switch__track" /><span>Tap a photo on the site to replace it</span>
+        </button>
       </div>
 
       <div className="editor">
-        {/* LEFT: the real generated site */}
+        {/* LEFT: the real generated site (stays in view on desktop while you scroll the controls) */}
+        <div className="preview-col">
         <div className="preview-frame">
           {project.previewUrl ? (
             <iframe ref={frameRef} key={frameKey} src={project.previewUrl} title="Your generated site"
@@ -314,10 +343,13 @@ export default function Editor({ go, project }) {
         </div>
         {project.previewUrl && (
           <div className="preview-actions">
-            <a className="chip" href={project.previewUrl} target="_blank" rel="noreferrer">Open live preview ↗</a>
-            {imgMode && <span className="muted">Click any image in the preview to swap it.</span>}
+            <a className="chip" href={project.live && project.domain ? `https://${project.domain}` : project.previewUrl} target="_blank" rel="noreferrer">
+              {project.live ? 'Open my website' : 'Open the preview in a new tab'}
+            </a>
+            {imgMode && <span className="muted">Tap any photo on the site to swap it.</span>}
           </div>
         )}
+        </div>
 
         {/* RIGHT: controls — every tap STAGES, nothing rebuilds until Apply */}
         <div>
@@ -346,7 +378,7 @@ export default function Editor({ go, project }) {
                           ) : (
                             <button className="btn btn--ghost ask__btn"
                               onClick={() => { stage(`ask-${ask.slice(0, 20)}`, ask, ask, true); dismiss(ask); }}>
-                              Add to changes
+                              Add to my changes
                             </button>
                           )}
                         </div>
@@ -367,7 +399,7 @@ export default function Editor({ go, project }) {
           )}
 
           <p className="muted" style={{ marginTop: 0 }}>
-            Pick as much as you like — nothing rebuilds until you hit <strong>Apply changes</strong>.
+            Add as many changes as you like. Nothing changes on your site until you press <strong>Update my site</strong>.
           </p>
 
           {!opts ? <p className="muted">Loading options…</p> : (
@@ -487,12 +519,63 @@ export default function Editor({ go, project }) {
               })()}
 
               <div className="zone">
+                <h3>Where else people find you</h3>
+                {socialText === null ? (
+                  <>
+                    {(stagedOf('socials')?.payload || opts.socials || []).length ? (
+                      <ul className="requests">
+                        {(stagedOf('socials')?.payload || opts.socials).map((u) => <li key={u}><span style={{ wordBreak: 'break-all' }}>{u}</span></li>)}
+                      </ul>
+                    ) : <p className="muted" style={{ margin: 0 }}>No Facebook, Instagram or other pages on your site yet.</p>}
+                    <button className="chip" style={{ marginTop: 10 }}
+                      onClick={() => setSocialText((stagedOf('socials')?.payload || opts.socials || []).join('\n'))}>
+                      {(opts.socials || []).length ? 'Change these links' : 'Add Facebook, Instagram and others'}
+                    </button>
+                  </>
+                ) : (
+                  <div className="stack">
+                    <label htmlFor="soc">One link per line <span className="hint">e.g. https://www.facebook.com/yourbusiness</span></label>
+                    <textarea id="soc" className="input" style={{ minHeight: 100 }} autoCapitalize="off" spellCheck={false}
+                      value={socialText} onChange={(e) => setSocialText(e.target.value)} />
+                    <div className="row">
+                      <Button variant="ghost" onClick={() => {
+                        const list = socialText.split(/[\s,]+/).map((x) => x.trim()).filter(Boolean)
+                          .map((x) => (/^https?:\/\//i.test(x) ? x : `https://${x.replace(/^\/+/, '')}`));
+                        save([...pending.filter((x) => x.kind !== 'socials'), {
+                          id: `socials-${Date.now()}`, kind: 'socials', payload: list, instruction: null,
+                          label: list.length ? `Social links (${list.length})` : 'Remove social links',
+                        }]);
+                        setSocialText(null);
+                      }}>Add to my changes</Button>
+                      <button className="link" onClick={() => setSocialText(null)}>Cancel</button>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {opts.requests?.length > 0 && (
+                <div className="zone">
+                  <h3>Changes you’ve asked for</h3>
+                  <p className="muted" style={{ margin: '0 0 10px' }}>These stay on your site through every future change. Undo one if you change your mind.</p>
+                  <ul className="requests">
+                    {opts.requests.map((r) => (
+                      <li key={r.id}>
+                        <span>{r.text}</span>
+                        <button className="link" onClick={() => setConfirmUndo(r)}>Undo</button>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
+              <div className="zone">
                 <h3>Ask for any change</h3>
-                <textarea className="input" placeholder={placeholderText}
+                <label htmlFor="ask" className="hint" style={{ marginBottom: 8 }}>Be as specific as you can, like “make the phone number bigger in the top bar”. Small requests make small changes.</label>
+                <textarea id="ask" className="input" placeholder={placeholderText}
                   value={prompt} onChange={(e) => setPrompt(e.target.value)} />
-                <Button variant="ghost" disabled={prompt.trim().length < 4}
-                  onClick={() => { stage('prompt', prompt.trim(), prompt.trim()); setPrompt(''); }}>
-                  Add to changes
+                <Button variant="ghost" style={{ marginTop: 10 }} disabled={prompt.trim().length < 4}
+                  onClick={() => { stage(`prompt-${Date.now()}`, prompt.trim(), prompt.trim()); setPrompt(''); }}>
+                  Add to my changes
                 </Button>
               </div>
             </>
@@ -500,23 +583,44 @@ export default function Editor({ go, project }) {
 
           {/* PENDING LIST — the staged batch, each removable */}
           <div className="zone">
-            <h3>Pending changes {pending.length ? `(${pending.length})` : ''}</h3>
+            <h3>Waiting to be added {pending.length ? `(${pending.length})` : ''}</h3>
             {!pending.length ? (
-              <p className="muted">Nothing staged yet. Your site stays exactly as it is.</p>
+              <p className="muted">Nothing yet. Your site stays exactly as it is.</p>
             ) : (
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+              <div className="pending">
                 {pending.map((p) => (
                   <span key={p.id} className="chip" style={{ display: 'inline-flex', gap: 8, alignItems: 'center' }}>
                     {p.label}
                     <button onClick={() => unstage(p.id)} aria-label={`Remove ${p.label}`}
-                      style={{ background: 'none', border: 'none', color: 'var(--text-dim)', cursor: 'pointer', fontSize: '1rem', lineHeight: 1 }}>×</button>
+                      style={{ background: 'none', border: 'none', color: 'var(--stone)', cursor: 'pointer', fontSize: '1.2rem', lineHeight: 1, padding: '2px 4px' }}>×</button>
                   </span>
                 ))}
               </div>
             )}
           </div>
+
+          <div className="zone">
+            <h3>Not feeling it?</h3>
+            <p className="muted" style={{ margin: '0 0 10px' }}>Get a completely new design. Your business info, photos and the changes you’ve asked for are kept.</p>
+            <Button variant="ghost" onClick={() => setConfirmRedesign(true)}>Start over with a fresh design</Button>
+          </div>
         </div>
       </div>
+
+      {confirmUndo && (
+        <Confirm title="Undo this change?" yes="Undo it" onNo={() => setConfirmUndo(null)}
+          onYes={() => { const r = confirmUndo; setConfirmUndo(null); runNow({ removeRequestId: r.id }, 'Undoing that change…'); }}>
+          <p style={{ margin: 0 }}>“{confirmUndo.text}”</p>
+          <p className="muted" style={{ margin: '10px 0 0' }}>That part of your site goes back to how it was. Nothing else changes.</p>
+        </Confirm>
+      )}
+      {confirmRedesign && (
+        <Confirm title="Start over with a fresh design?" yes="Yes, give me a new design" onNo={() => setConfirmRedesign(false)}
+          onYes={() => { setConfirmRedesign(false); runNow({ redesign: true, instructions: [] }, 'Designing a fresh version of your site…'); }}>
+          <p style={{ margin: 0 }}>Your whole site gets a new look: new layout, colors and fonts. Your business details, photos and earlier requests are kept.</p>
+          <p className="muted" style={{ margin: '10px 0 0' }}>Takes about 3 to 5 minutes. You can’t switch back to this version afterward.</p>
+        </Confirm>
+      )}
 
       {target && (
         <div className="swap" role="dialog" aria-label="Replace image">
@@ -544,15 +648,17 @@ export default function Editor({ go, project }) {
         </div>
       )}
 
-      <div className="price-bar" style={{ marginTop: 18, borderRadius: 'var(--radius)', gap: 12, flexWrap: 'wrap' }}>
-        <span className="muted">
+      <div className="price-bar" style={{ marginTop: 18, gap: 12, flexWrap: 'wrap' }}>
+        <span className="muted" style={{ color: 'var(--paper-dim)' }}>
           {pending.length
-            ? `${pending.length} change${pending.length > 1 ? 's' : ''} staged — nothing is live until you apply`
-            : 'Nothing staged yet. Stack up changes, then rebuild in one go.'}
+            ? `${pending.length} change${pending.length > 1 ? 's' : ''} waiting. Your site updates when you press the button.`
+            : project.live ? 'Add a change above, then update your site.' : 'Happy with it? Put it on your own web address.'}
         </span>
         <div className="row" style={{ justifyContent: 'flex-end', margin: 0 }}>
-          <Button variant="ghost" disabled={!pending.length} onClick={applyAll}>Apply changes</Button>
-          <Button onClick={() => go('domain')}>Make it live →</Button>
+          {pending.length > 0 && <Button onClick={applyAll}>Update my site</Button>}
+          {project.live
+            ? <Button variant={pending.length ? 'ghost' : 'primary'} onClick={() => go('dashboard')}>Back to my sites</Button>
+            : <Button variant={pending.length ? 'ghost' : 'primary'} onClick={() => go('domain')}>Make it live</Button>}
         </div>
       </div>
     </div>
