@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { Button } from '../components/Bits.jsx';
+import { PriceExplainer } from '../components/Explain.jsx';
 import { checkDomain, inspectDomain, connectDomain, domainStatus } from '../api/engine.js';
 
 export default function DomainStep({ go, project = {} }) {
@@ -69,6 +70,7 @@ export default function DomainStep({ go, project = {} }) {
             <span>Total (first term)</span><span>${quote.total.toFixed(2)}</span>
           </div>
           <p className="muted" style={{ margin: '10px 0 0' }}>That covers your first year. Before it renews we email you twice, and you decide.</p>
+          <PriceExplainer />
           <Button className="btn--block" onClick={() => go('checkout', { domain: quote.domain, quote })} style={{ marginTop: 14 }}>Use {quote.domain}</Button>
         </div>
       ) : (
@@ -125,12 +127,14 @@ function ConnectOwnDomain({ go, project }) {
   if (conn) {
     const w = conn.walkthrough || {};
     return (
-      <div className="container" style={{ paddingTop: 24, maxWidth: 720 }}>
+      <div className="page">
         <h1>Point {conn.domain} at your new site</h1>
         <p className="sub" style={{ maxWidth: '60ch' }}>
           Your site is built and waiting. One setting at {w.registrar || 'your domain provider'} switches it over.
           {' '}Your current site stays up until the change takes effect.
         </p>
+
+        <EmailCheck dns={conn.dns} domain={conn.domain} />
 
         <div className="card" style={{ marginTop: 18 }}>
           <h3>Enter these two nameservers</h3>
@@ -205,10 +209,10 @@ function ConnectOwnDomain({ go, project }) {
         )}
 
         <div className="notice" style={{ textAlign: 'left', maxWidth: 520 }}>
-          <strong>Do you have email at this address?</strong>{' '}
+          <strong>Have email at this address?</strong>{' '}
           <span className="muted" style={{ color: 'var(--paper-dim)' }}>
-            Like you@{info.domain}. If so, text or call DK Sites at (860) 385-2334 before you switch it over,
-            so we can make sure your email keeps working.
+            Like you@{info.domain}. We copy its settings to your new setup so it keeps working.
+            You’ll see exactly what we found on the next screen, before you change anything.
           </span>
         </div>
 
@@ -260,6 +264,58 @@ function ConnectOwnDomain({ go, project }) {
         </Button>
         {err && <p className="ask__err">{err}</p>}
       </div>
+    </div>
+  );
+}
+
+// What we found on their current domain and copied over, so switching nameservers can't
+// quietly break their email. If we couldn't read it, say so plainly and send them to a person.
+function EmailCheck({ dns, domain }) {
+  if (!dns) return null; // older engine: nothing to show
+  const help = (
+    <>Text or call DK Sites at <a href="sms:+18603852334">(860) 385-2334</a> before you switch, and we’ll sort it out with you.</>
+  );
+  if (!dns.ok) {
+    return (
+      <div className="alert" style={{ marginTop: 18 }}>
+        <strong>Hold on before you switch.</strong>{' '}
+        <span style={{ color: 'var(--paper-dim)' }}>
+          We couldn’t fully read {domain}’s current settings{dns.failed?.length ? ` (${dns.failed.length} couldn’t be copied)` : ''}.
+          If you have email or anything else at this address, it could stop working. {help}
+        </span>
+      </div>
+    );
+  }
+  const e = dns.email || {};
+  return (
+    <div className="card" style={{ marginTop: 18 }}>
+      <h3>{e.hasEmail ? 'Your email will keep working' : 'No email found on this address'}</h3>
+      {e.hasEmail ? (
+        <p className="muted" style={{ margin: 0, color: 'var(--paper-dim)' }}>
+          You use <strong>{e.provider}</strong>. We copied its settings{dns.copied ? ` (${dns.copied} in all)` : ''} to your new setup,
+          so mail to @{domain} keeps arriving after you switch.
+        </p>
+      ) : (
+        <p className="muted" style={{ margin: 0 }}>
+          We didn’t find email at @{domain}{dns.copied ? `, but we copied ${dns.copied} other setting${dns.copied > 1 ? 's' : ''} so they keep working` : ''}.
+        </p>
+      )}
+      {e.needsHelp && (
+        <p className="ask__err" style={{ margin: '10px 0 0' }}>
+          Your email uses {e.provider}, which stops when the address moves. {help}
+        </p>
+      )}
+      {dns.records?.length > 0 && (
+        <details style={{ marginTop: 10 }}>
+          <summary className="explain" style={{ cursor: 'pointer' }}>See what we copied</summary>
+          <ul className="muted" style={{ margin: '8px 0 0', paddingLeft: 18, fontFamily: 'var(--mono)', fontSize: '.8rem', wordBreak: 'break-all' }}>
+            {dns.records.map((r) => <li key={r}>{r}</li>)}
+          </ul>
+        </details>
+      )}
+      <p className="muted" style={{ margin: '12px 0 0' }}>
+        Anything else at this address, like an online store at shop.{domain}? Tell us before you switch so we can keep it working too.
+      </p>
     </div>
   );
 }

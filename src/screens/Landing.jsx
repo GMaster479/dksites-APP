@@ -1,7 +1,10 @@
+import { useState } from 'react';
 import { Button } from '../components/Bits.jsx';
+import { WhySheet } from '../components/Explain.jsx';
 
 export default function Landing({ go, project, startFresh, user }) {
   const hasBuild = Boolean(project?.previewUrl) && !project?.live;
+  const [why, setWhy] = useState(false);
   return (
     <div className="page">
       {hasBuild && (
@@ -26,9 +29,11 @@ export default function Landing({ go, project, startFresh, user }) {
         <Button onClick={() => go('exists', {}, { fresh: !hasBuild ? true : false })}>Build my free preview</Button>
         {user && <Button variant="ghost" onClick={() => go('dashboard')}>Go to my sites</Button>}
       </div>
+      <button className="link" style={{ alignSelf: 'flex-start' }} onClick={() => setWhy(true)}>What is this, and what does it cost?</button>
+      {why && <WhySheet onClose={() => setWhy(false)} />}
 
       <ul className="landing-facts">
-        <li><strong>Free to try.</strong> Build and change it as much as you like. You only pay when it goes live.</li>
+        <li><strong>Free to try.</strong> Build and change it as much as you like. You only pay when it goes live: one price for the year, about $147 with a new .com.</li>
         <li><strong>No tech skills needed.</strong> Ask for changes in plain words. Each change only touches what you asked for.</li>
         <li><strong>It’s yours.</strong> Your web address, your site, and a real person to call: DK Sites, based in Connecticut.</li>
       </ul>

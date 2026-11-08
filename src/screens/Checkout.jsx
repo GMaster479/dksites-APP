@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Button } from '../components/Bits.jsx';
 import SignIn from '../components/SignIn.jsx';
+import { PriceExplainer } from '../components/Explain.jsx';
 import { createCheckout } from '../api/engine.js';
 
 // The account gate lives HERE — after they've fallen for the preview, before they pay.
@@ -58,9 +59,10 @@ export default function Checkout({ go, project, user, googleClientId, onSignedIn
           </div>
           <p className="muted" style={{ margin: '8px 0 0' }}>
             {project.ownDomain
-              ? `Hosting, SSL & email + service fee. No domain charge — you keep ${project.domain} at ${project.registrar || 'your registrar'} and keep paying that renewal there.`
-              : 'Itemized: domain + hosting/SSL/email + service fee.'}
+              ? `Hosting, SSL & site editing + service fee. No domain charge — you keep ${project.domain} at ${project.registrar || 'your registrar'} and keep paying that renewal there.`
+              : 'Your web address, hosting with SSL and site editing, and the service fee.'}
           </p>
+          <PriceExplainer ownDomain={!!project.ownDomain} />
         </div>
 
         <label className="optin">

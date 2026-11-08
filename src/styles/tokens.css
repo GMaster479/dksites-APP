@@ -286,3 +286,16 @@ label{display:block;font-size:.95rem;color:var(--paper);font-weight:500;margin:0
 .landing-facts li{color:var(--paper-dim);padding-left:18px;position:relative}
 .landing-facts li::before{content:"";position:absolute;left:0;top:.62em;width:8px;height:8px;background:var(--paper);border-radius:1px}
 .landing-facts strong{color:var(--paper);font-family:var(--display);font-weight:600}
+
+/* ---- explainers ---- */
+.explainer{margin-top:14px;border-top:1px solid var(--rule);padding-top:10px;text-align:left}
+.explainer summary{cursor:pointer;font:500 .95rem var(--display);color:var(--paper);padding:6px 0;list-style:none}
+.explainer summary::-webkit-details-marker{display:none}
+.explainer summary::before{content:"+ ";color:var(--stone)}
+.explainer[open] summary::before{content:"– "}
+.explainer dl{margin:8px 0 0;display:grid;gap:4px}
+.explainer dt{font:600 .95rem var(--display);color:var(--paper);margin-top:8px}
+.explainer dd{margin:0;color:var(--paper-dim);font-size:.95rem}
+.why h3{margin:20px 0 4px}
+.why p{margin:0;color:var(--paper-dim)}
+.why p:first-child{margin-top:8px;color:var(--paper)}

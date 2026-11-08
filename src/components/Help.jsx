@@ -1,4 +1,6 @@
+import { useState } from 'react';
 import { Sheet } from './Bits.jsx';
+import { WhySheet } from './Explain.jsx';
 
 // A real person to reach, always one tap away. DK Sites promises direct access to Dylan,
 // so the help button leads with that, then answers the questions people actually ask.
@@ -7,7 +9,8 @@ const PHONE_TEL = '+18603852334';
 const EMAIL = 'dylan@dksitesllc.com';
 
 const FAQ = [
-  ['How much does it cost?', 'Building and changing your site is free. When you go live you pay once for the year: your web address (if you need a new one), hosting with the secure padlock and email, plus a service fee. You see the exact total before you pay.'],
+  ['How much does it cost?', 'Building and changing your site is free. When you go live you pay once for the year: your web address (if you need a new one), hosting with the secure padlock and site editing, plus a 30% service fee. About $147 with a new .com. You see the exact total before you pay, and there’s no monthly plan.'],
+  ['Does it include email?', 'Not inboxes. If you already have email at your web address (like you@yourbusiness.com), we copy its settings when you connect the address so it keeps working.'],
   ['Do I need to know anything technical?', 'No. Describe changes in your own words, like “make the phone number bigger” or “add our Sunday hours”, and the site is updated for you.'],
   ['Will my changes undo each other?', 'No. Each change only touches what you asked for, and everything you asked for earlier stays. You can see and undo any earlier change in the editor.'],
   ['What’s a domain?', 'Your web address, like yourbusiness.com. You can buy a new one here, or keep one you already own and point it at your new site.'],
@@ -16,6 +19,8 @@ const FAQ = [
 ];
 
 export default function Help({ onClose }) {
+  const [why, setWhy] = useState(false);
+  if (why) return <WhySheet onClose={onClose} />;
   return (
     <Sheet title="Need a hand?" onClose={onClose}>
       <p className="muted" style={{ margin: '4px 0 0' }}>You’ll reach Dylan, who runs DK Sites. Texting is fastest.</p>
@@ -24,6 +29,7 @@ export default function Help({ onClose }) {
         <a className="btn btn--ghost btn--block" href={`tel:${PHONE_TEL}`}>Call {PHONE}</a>
         <a className="btn btn--ghost btn--block" href={`mailto:${EMAIL}?subject=Help%20with%20DK%20Sites%20Builder`}>Email {EMAIL}</a>
       </div>
+      <button className="link" style={{ marginTop: 6 }} onClick={() => setWhy(true)}>What is DK Sites Builder, and why not Wix or ChatGPT?</button>
       <div className="faq">
         {FAQ.map(([q, a]) => (
           <details key={q}><summary>{q}</summary><p>{a}</p></details>

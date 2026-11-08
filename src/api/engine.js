@@ -119,7 +119,7 @@ async function shrinkImage(file, max = 2400) {
 }
 
 export async function checkDomain(domain) {
-  if (MOCK) { await wait(700); const ai = domain.endsWith('.ai'); const dc = ai ? 89.98 : 13.98; const y = ai ? 2 : 1; const fee = +(0.3 * (dc + 99)).toFixed(2); return { domain, available: !domain.includes('taken'), years: y, lineItems: [{ label: `Domain (${y} yr)`, amount: dc }, { label: 'Hosting, SSL & email (1 yr)', amount: 99 }, { label: 'DK Sites service fee (30%)', amount: fee }], total: +(dc + 99 + fee).toFixed(2) }; }
+  if (MOCK) { await wait(700); const ai = domain.endsWith('.ai'); const dc = ai ? 89.98 : 13.98; const y = ai ? 2 : 1; const fee = +(0.3 * (dc + 99)).toFixed(2); return { domain, available: !domain.includes('taken'), years: y, lineItems: [{ label: `Domain (${y} yr)`, amount: dc }, { label: 'Hosting, SSL & site editing (1 yr)', amount: 99 }, { label: 'DK Sites service fee (30%)', amount: fee }], total: +(dc + 99 + fee).toFixed(2) }; }
   return get(`/api/check?domain=${encodeURIComponent(domain)}`);
 }
 
@@ -145,6 +145,8 @@ export async function connectDomain(domain, previewId, slug) {
     await wait(1200);
     return { domain, zoneId: 'mock', zoneStatus: 'pending',
       nameservers: ['grant.ns.cloudflare.com', 'peaches.ns.cloudflare.com'],
+      dns: { ok: true, copied: 7, failed: [], email: { hasEmail: true, provider: 'Google Workspace (Gmail)', mx: ['1 smtp.google.com'], needsHelp: false },
+        records: [`MX ${domain} → smtp.google.com`, `TXT ${domain} → v=spf1 include:_spf.google.com ~all`, `TXT _dmarc.${domain} → v=DMARC1; p=none`] },
       walkthrough: { registrar: 'GoDaddy', steps: ['Sign in at godaddy.com and open "My Products".'],
         nameservers: ['grant.ns.cloudflare.com', 'peaches.ns.cloudflare.com'],
         nameserverNote: 'Replace BOTH existing nameservers.', propagation: 'Usually 15 minutes to a couple of hours.' } };
