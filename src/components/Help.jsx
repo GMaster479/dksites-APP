@@ -13,6 +13,7 @@ const FAQ = [
   ['Does it include email?', 'Not inboxes. If you already have email at your web address (like you@yourbusiness.com), we copy its settings when you connect the address so it keeps working.'],
   ['Do I need to know anything technical?', 'No. Describe changes in your own words, like “make the phone number bigger” or “add our Sunday hours”, and the site is updated for you.'],
   ['Will my changes undo each other?', 'No. Each change only touches what you asked for, and everything you asked for earlier stays. You can see and undo any earlier change in the editor.'],
+  ['Can I close the app while my site updates?', 'Yes. Once you press “Update my site”, the change is made on our end even if you close the app, lock your phone or lose signal. When it’s done we send a notification to your phone (if you turned them on) or an email. Open the app any time to see it.'],
   ['What’s a domain?', 'Your web address, like yourbusiness.com. You can buy a new one here, or keep one you already own and point it at your new site.'],
   ['What if I don’t like it?', 'Ask for changes, as many as you want. Or start over with a fresh design. Nothing is charged until you choose to go live.'],
   ['Can someone just build it for me?', 'Yes. DK Sites also designs custom sites by hand. Call or text and we’ll talk it through.'],

@@ -299,3 +299,30 @@ label{display:block;font-size:.95rem;color:var(--paper);font-weight:500;margin:0
 .why h3{margin:20px 0 4px}
 .why p{margin:0;color:var(--paper-dim)}
 .why p:first-child{margin-top:8px;color:var(--paper)}
+
+/* ---- Nov 14: "you can close the app" card + Facebook/Instagram panel ---- */
+.leave{display:flex;flex-direction:column;gap:6px;text-align:left;margin-top:18px;max-width:520px}
+.leave strong{font-family:var(--display);font-size:1.05rem}
+.social{display:flex;flex-direction:column;gap:12px;margin-bottom:18px}
+.social p{margin:4px 0 0}
+.social__head{display:flex;gap:14px;align-items:center}
+.social__logos{width:46px;height:46px;flex:none;border-radius:12px;background:var(--raised);border:1px solid var(--rule);display:flex;align-items:center;justify-content:center;font:600 .95rem var(--display);color:var(--paper-dim)}
+.social__avatar,.social__ph{width:46px;height:46px;flex:none;border-radius:50%;object-fit:cover;background:var(--raised);border:1px solid var(--rule)}
+.social__test{font-size:.85rem;color:var(--stone);border-left:2px solid var(--rule-strong);padding-left:10px;margin:0}
+.social__pages{display:flex;flex-direction:column;gap:8px}
+.social__page{display:flex;gap:12px;align-items:center;padding:12px 14px}
+.social__page img{width:40px;height:40px;border-radius:50%;object-fit:cover}
+.social__page span{display:flex;flex-direction:column;gap:2px}
+.social__uses{display:flex;flex-direction:column;border-top:1px solid var(--rule)}
+.social__use{display:flex;flex-direction:column;align-items:stretch;gap:10px;padding:14px 0;border-bottom:1px solid var(--rule)}
+.social__use > div:first-child{display:flex;flex-direction:column;gap:3px;min-width:0}
+.social__use .btn,.social__use .social__done{align-self:flex-start}
+.social__quote{margin:6px 0;padding:8px 12px;border-left:2px solid var(--rule-strong);color:var(--paper-dim);font-size:.95rem;max-height:7.5em;overflow:auto}
+.social__done{color:var(--paper-dim);font-size:.92rem;display:inline-flex;gap:10px;align-items:center;flex:none}
+.social__grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px}
+@media(max-width:520px){.social__grid{grid-template-columns:repeat(3,minmax(0,1fr))}}
+.social__pic{position:relative;padding:0;border:2px solid transparent;border-radius:8px;overflow:hidden;cursor:pointer;background:var(--raised);aspect-ratio:1/1}
+.social__pic img{width:100%;height:100%;object-fit:cover;display:block}
+.social__pic--on{border-color:var(--paper)}
+.social__tick{position:absolute;top:5px;right:5px;width:22px;height:22px;border-radius:50%;background:var(--paper);color:var(--ink);font-size:.75rem;font-weight:700;display:flex;align-items:center;justify-content:center}
+.social__foot{display:flex;gap:18px;flex-wrap:wrap}

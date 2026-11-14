@@ -67,16 +67,63 @@ export async function applyEdit(previewId, change, onStage) {
     setPalette: change.setPalette || null,
     setFonts: change.setFonts || null,
   };
+  if (change.meta) body.meta = change.meta;
   const started = await post('/api/apply-edit', body);
   if (!started.jobId) return started; // older server: already-finished response
+  rememberEdit(previewId, started.jobId);
+  return waitForEdit(previewId, started.jobId, onStage);
+}
 
+// ---- Nov 14: edits finish on the server even if the app closes ------------------------
+// The job id is remembered per site, so reopening the app picks the edit back up.
+const editKey = (id) => `dksites-edit-${id}`;
+export function rememberEdit(previewId, jobId) { try { localStorage.setItem(editKey(previewId), jobId); } catch {} }
+export function forgetEdit(previewId) { try { localStorage.removeItem(editKey(previewId)); } catch {} }
+export function rememberedEdit(previewId) { try { return localStorage.getItem(editKey(previewId)); } catch { return null; } }
+
+/** Poll a running edit until it's done. Network blips are retried, not treated as failure. */
+export async function waitForEdit(previewId, jobId, onStage) {
+  let misses = 0;
   for (;;) {
     await wait(2500);
-    const st = await get(`/api/status/${started.jobId}`);
+    let st;
+    try { st = await get(`/api/status/${jobId}`); misses = 0; }
+    catch (e) {
+      if (e.status === 404) { forgetEdit(previewId); throw new Error('We lost track of that change. Check your site — it may already be updated.'); }
+      if (++misses > 40) throw new Error('Can’t reach DK Sites right now. Your change is still being made — check back in a few minutes.');
+      continue;
+    }
     if (onStage && st.stage) onStage(st.stage, st.progress);
-    if (st.status === 'done') return st.result || {};
-    if (st.status === 'error') throw new Error(st.error || 'The rebuild failed.');
+    if (st.status === 'done') { forgetEdit(previewId); return { ...(st.result || {}), jobId }; }
+    if (st.status === 'error') { forgetEdit(previewId); throw new Error(st.error || 'The rebuild failed.'); }
   }
+}
+
+/** The most recent edit for this site in the last two hours (running or finished). */
+export async function latestEdit(previewId) {
+  if (MOCK) return { job: null };
+  try { return await get(`/api/edits/latest?previewId=${encodeURIComponent(previewId)}`); } catch { return { job: null }; }
+}
+
+// ---- Nov 14: "your site was updated" notifications -------------------------------------
+export async function getPushKey() { return get('/api/push/key'); }
+export async function savePushSubscription(subscription) { return post('/api/push/subscribe', { subscription }); }
+export async function sendTestPush() { return post('/api/push/test', {}); }
+
+// ---- Nov 14: Facebook Page + Instagram ----------------------------------------------------
+export async function metaAvailable() {
+  if (MOCK) return { enabled: false };
+  try { return await get('/api/meta/available'); } catch { return { enabled: false }; }
+}
+export async function metaConnection(previewId) { return get(`/api/meta/connection?previewId=${encodeURIComponent(previewId)}`); }
+export async function metaChoosePage(previewId, pageId) { return post('/api/meta/choose', { previewId, pageId }); }
+export async function metaRefresh(previewId) { return post('/api/meta/refresh', { previewId }); }
+export async function metaDisconnect(previewId) {
+  return call(`/api/meta/connection?previewId=${encodeURIComponent(previewId)}`, { method: 'DELETE' });
+}
+/** A real page navigation (Facebook's sign-in can't run inside fetch). */
+export function metaStartUrl(previewId, ret = 'editor') {
+  return `${API}/api/meta/start?previewId=${encodeURIComponent(previewId)}&return=${ret}`;
 }
 
 

@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 import { Button, Confirm } from '../components/Bits.jsx';
-import { getEditOptions, applyEdit, uploadFile, importImage } from '../api/engine.js';
+import { LeaveItWithUs } from '../components/Notify.jsx';
+import SocialConnect from '../components/Social.jsx';
+import { getEditOptions, applyEdit, uploadFile, importImage, latestEdit, rememberedEdit, waitForEdit } from '../api/engine.js';
 
 // STAGED EDITOR
 // Tapping a palette/font/suggestion no longer regenerates the site. Every choice is
@@ -10,6 +12,12 @@ import { getEditOptions, applyEdit, uploadFile, importImage } from '../api/engin
 
 const stageKey = (id) => `dksites-pending-${id || 'none'}`;
 const dismissKey = (id) => `dksites-dismissed-${id || 'none'}`;
+// The batch that's being made right now. It leaves the "waiting" list the moment it's sent
+// (so reopening the app can never send it twice) and comes back only if the edit fails.
+const inflightKey = (id) => `dksites-inflight-${id || 'none'}`;
+const SEEN_KEY = 'dksites-seen-edits';
+const seenEdits = () => { try { return JSON.parse(localStorage.getItem(SEEN_KEY)) || []; } catch { return []; } };
+const markSeen = (jobId) => { try { localStorage.setItem(SEEN_KEY, JSON.stringify([jobId, ...seenEdits()].slice(0, 40))); } catch {} };
 
 // What the owner can hand us that public data never has. These asks are the most valuable
 // thing on the screen — a real logo fixes the palette, a real menu replaces placeholders —
@@ -49,7 +57,7 @@ function fontList(f) {
     .map(([k, v]) => ({ role: roles[k] || k, name: v }));
 }
 
-export default function Editor({ go, project }) {
+export default function Editor({ go, project, user }) {
   const [opts, setOpts] = useState(null);
   const [pending, setPending] = useState([]);
   const [prompt, setPrompt] = useState('');
@@ -70,6 +78,57 @@ export default function Editor({ go, project }) {
   const [confirmRedesign, setConfirmRedesign] = useState(false);
   const [socialText, setSocialText] = useState(null);     // null = not editing
   const frameRef = useRef(null);
+  const alive = useRef(true);
+  useEffect(() => () => { alive.current = false; }, []);
+
+  // A finished edit: show what changed and reload the preview.
+  async function finished(r, jobId) {
+    if (!alive.current) return;
+    if (jobId) markSeen(jobId);
+    try { localStorage.removeItem(inflightKey(project.previewId)); } catch {}
+    setLastSummary(r?.summary || 'Your changes are on your site.');
+    try { const o = await getEditOptions(project.previewId); if (alive.current) setOpts(o); } catch {}
+    if (!alive.current) return;
+    setFrameKey((k) => k + 1);
+    setApplying(false);
+  }
+  // A failed edit: put the batch back in the waiting list so nothing is lost.
+  function failed(e, jobId) {
+    if (!alive.current) return;
+    if (jobId) markSeen(jobId);
+    try {
+      const back = JSON.parse(localStorage.getItem(inflightKey(project.previewId)) || '[]');
+      localStorage.removeItem(inflightKey(project.previewId));
+      if (back.length) setPending((cur) => {
+        const merged = [...back, ...cur.filter((c) => !back.some((b) => b.id === c.id))];
+        try { localStorage.setItem(stageKey(project.previewId), JSON.stringify(merged)); } catch {}
+        return merged;
+      });
+    } catch {}
+    setApplyError(e.message || 'Something went wrong while making your changes.');
+    setApplying(false);
+  }
+
+  // Coming back to the app: is a change still being made, or did one finish while away?
+  useEffect(() => {
+    (async () => {
+      const { job: latest } = await latestEdit(project.previewId);
+      const remembered = rememberedEdit(project.previewId);
+      const job = latest || (remembered ? { jobId: remembered, status: 'running' } : null);
+      if (!job || !alive.current) return;
+      if (job.status === 'queued' || job.status === 'running') {
+        setWorkingOn([]); setApplyError(null); setApplying(true);
+        setApplyStage(job.stage || 'Picking up where you left off…');
+        try {
+          const r = await waitForEdit(project.previewId, job.jobId, (st) => alive.current && setApplyStage(st));
+          finished(r, job.jobId);
+        } catch (e) { failed(e, job.jobId); }
+      } else if (!seenEdits().includes(job.jobId)) {
+        if (job.status === 'done') finished(job.result, job.jobId);
+        else if (job.status === 'error') failed({ message: job.error }, job.jobId);
+      }
+    })();
+  }, []);
 
   // Load options + restore any staged-but-unapplied changes from a previous visit.
   useEffect(() => {
@@ -218,21 +277,23 @@ export default function Editor({ go, project }) {
     // stored decisions — otherwise the "in use" panel keeps showing the old values.
     const setPalette = stagedOf('palette')?.payload || null;
     const setFonts = stagedOf('fonts')?.payload || null;
+    // Facebook / Instagram choices travel together; the server does the downloading.
+    const metaParts = pending.filter((p) => p.meta);
+    const meta = metaParts.length
+      ? metaParts.reduce((m, p) => ({ ...m, ...p.meta, photoIds: [...(m.photoIds || []), ...(p.meta.photoIds || [])] }), {})
+      : null;
 
+    try { localStorage.setItem(inflightKey(project.previewId), JSON.stringify(pending)); } catch {}
+    save([]);
     try {
       const r = await applyEdit(
         project.previewId,
-        { instructions, slug: project.slug, logoFile, menuFile, menuFiles: menuRecords, photoFiles, setPalette, setFonts, setSocials },
-        (stage) => setApplyStage(stage)
+        { instructions, slug: project.slug, logoFile, menuFile, menuFiles: menuRecords, photoFiles, setPalette, setFonts, setSocials, meta },
+        (stage) => alive.current && setApplyStage(stage)
       );
-      setLastSummary(r?.summary || 'Your changes are on your site.');
-      save([]);
-      try { setOpts(await getEditOptions(project.previewId)); } catch {}
-      setFrameKey((k) => k + 1);
-      setApplying(false);
+      finished(r, r?.jobId);
     } catch (e) {
-      setApplyError(e.message || 'Something went wrong while making your changes.');
-      setApplying(false);
+      failed(e);
     }
   }
 
@@ -241,14 +302,11 @@ export default function Editor({ go, project }) {
   async function runNow(change, label) {
     setApplyError(null); setWorkingOn([]); setApplying(true); setApplyStage(label);
     try {
-      const r = await applyEdit(project.previewId, { slug: project.slug, ...change }, (stage) => setApplyStage(stage));
-      setLastSummary(r?.summary || 'Done.');
-      try { setOpts(await getEditOptions(project.previewId)); } catch {}
-      setFrameKey((k) => k + 1);
+      const r = await applyEdit(project.previewId, { slug: project.slug, ...change }, (stage) => alive.current && setApplyStage(stage));
+      finished(r, r?.jobId);
     } catch (e) {
-      setApplyError(e.message || 'That didn’t go through. Your site wasn’t changed.');
+      failed({ message: e.message || 'That didn’t go through. Your site wasn’t changed.' });
     }
-    setApplying(false);
   }
 
   // ---- Applying: show the person their own decisions while they wait ----
@@ -263,6 +321,8 @@ export default function Editor({ go, project }) {
             <div key={i} className="card" style={{ padding: '10px 14px' }}>{label}</div>
           ))}
         </div>
+        <LeaveItWithUs user={user} />
+        {user && <Button variant="ghost" style={{ marginTop: 14 }} onClick={() => go('dashboard')}>Back to my sites</Button>}
       </div>
     );
   }
@@ -517,6 +577,10 @@ export default function Editor({ go, project }) {
                   </div>
                 );
               })()}
+
+              <SocialConnect previewId={project.previewId} mode="editor" pending={pending}
+                onStage={(entry) => save([...pending.filter((x) => x.kind !== entry.kind), entry])}
+                onUnstage={unstage} />
 
               <div className="zone">
                 <h3>Where else people find you</h3>

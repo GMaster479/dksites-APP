@@ -14,7 +14,19 @@ import Checkout from './screens/Checkout.jsx';
 import Launching from './screens/Launching.jsx';
 import Dashboard from './screens/Dashboard.jsx';
 import Admin from './screens/Admin.jsx';
-import { getMe, signOut, claimBuilds, getLaunchStatus } from './api/engine.js';
+import { getMe, signOut, claimBuilds, getLaunchStatus, getMySites } from './api/engine.js';
+import { refreshPushSubscription } from './components/Notify.jsx';
+
+const META_MESSAGES = {
+  connected: { ok: true, text: 'Facebook is connected. Choose how to use it below.' },
+  choose: { ok: true, text: 'Facebook is connected. Pick which Page is this business.' },
+  cancel: 'Facebook wasn’t connected. Nothing changed.',
+  nopages: 'We didn’t find a Facebook Page on that account. Try again, and in the Facebook window tick your business’s Page.',
+  expired: 'That took a little too long. Try connecting Facebook again.',
+  signin: 'Sign in first, then connect Facebook.',
+  unavailable: 'Connecting Facebook isn’t available yet.',
+  error: 'Facebook didn’t connect. Try again in a minute.',
+};
 
 // Wizard state persists to localStorage so a reload (or bouncing out to the live preview
 // on mobile, which evicts the tab) restores the person right where they were instead of
@@ -173,7 +185,7 @@ export default function App() {
 
   const onSignedIn = (u) => {
     setUser(u || null);
-    if (u) claimPending();
+    if (u) { claimPending(); refreshPushSubscription(); } // keep this device's notifications tied to them
   };
 
   // Merge into the saved project without changing screens (e.g. the draft id for uploads).
@@ -213,7 +225,7 @@ export default function App() {
   // On load: who's signed in, and what did a redirect (email link, Stripe) bring us back for?
   useEffect(() => {
     const q = new URLSearchParams(window.location.search);
-    const hadParams = ['signedin', 'signin', 'checkout', 'view', 'session_id', 'autorenew'].some((k) => q.has(k));
+    const hadParams = ['signedin', 'signin', 'checkout', 'view', 'session_id', 'autorenew', 'edited', 'meta'].some((k) => q.has(k));
     if (hadParams) window.history.replaceState({ dksitesStep: stepRef.current }, '', window.location.pathname);
 
     getMe()
@@ -244,11 +256,35 @@ export default function App() {
           if (q.get('autorenew') === 'on') setBanner({ ok: true, text: 'Card saved — auto-renew is on. Nothing was charged today.' });
           if (q.get('autorenew') === 'cancel') setBanner('No card was saved, so auto-renew is still off.');
           go(q.get('view'));
+        } else if (q.get('edited')) {
+          // Tapped a "your site was updated" notification or email.
+          openByPreviewId(q.get('edited'));
+        } else if (q.get('meta')) {
+          // Back from Facebook.
+          const msg = META_MESSAGES[q.get('meta')] || META_MESSAGES.error;
+          setBanner(msg);
+          const id = q.get('preview');
+          if (q.get('return') === 'extras' && id && p.draftId === id && canEnter('extras', p)) go('extras');
+          else if (id) openByPreviewId(id);
         } else if (q.get('signedin') && stepRef.current === 'landing') {
           go('dashboard'); // opened the email link somewhere with no build in progress
         }
       });
   }, []);
+
+  // Open a site in the editor knowing only its preview id (from a notification or Facebook).
+  const openByPreviewId = async (id) => {
+    const p = projectRef.current || {};
+    if (p.previewId === id && p.previewUrl) { go('editor', { editorNonce: Date.now() }); return; }
+    try {
+      const d = await getMySites();
+      const site = (d.sites || []).find((x) => x.previewId === id);
+      const b = (d.builds || []).find((x) => x.previewId === id);
+      if (site) openBuild({ previewId: id, slug: site.slug, previewUrl: b?.previewUrl || (site.slug ? `https://${site.slug}.dksites.com/` : null), name: b?.name, domain: site.domain, ownDomain: site.ownDomain });
+      else if (b) openBuild(b);
+      else go('dashboard');
+    } catch { go('dashboard'); }
+  };
 
   // fromDashboard: an owner opening an existing site, not someone in their first build —
   // so the step ruler stays out of the way.
@@ -285,7 +321,7 @@ export default function App() {
     confirm: <ConfirmBusiness go={go} project={project} />,
     describe: <DescribeBusiness go={go} />,
     generating: <Generating go={go} project={project} />,
-    editor: <Editor go={go} project={project} />,
+    editor: <Editor key={`${project.previewId}-${project.editorNonce || ''}`} go={go} project={project} user={user} />,
     domain: <DomainStep go={go} project={project} />,
     checkout: <Checkout go={go} project={project} user={user} googleClientId={googleClientId}
       onSignedIn={onSignedIn} notice={checkoutNotice} />,

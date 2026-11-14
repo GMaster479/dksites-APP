@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Button } from '../components/Bits.jsx';
 import { uploadFile, findSocials, newDraftId } from '../api/engine.js';
+import SocialConnect from '../components/Social.jsx';
 
 // "Add your logo and photos" — between finding the business and building it.
 // Everything here is optional, but a real logo sets the colors and real photos beat
@@ -164,6 +165,7 @@ export default function Extras({ go, project, patch }) {
 
       <section className="stack" aria-labelledby="so">
         <h2 id="so">Where else people find you</h2>
+        <SocialConnect previewId={draftId} mode="extras" />
         <p className="muted" style={{ margin: '-6px 0 0' }}>
           {looking ? 'Checking your current website for links…'
             : found.length ? `We found ${found.length} on your current website. Check they’re right and add any that are missing.`
